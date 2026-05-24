@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://api.github.com; img-src 'self'; font-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none';">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=(), bluetooth=(), serial=(), hid=()">
+    <meta name="referrer" content="no-referrer">
+    <title>mdr — Terminal Markdown Renderer</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --accent: #58a6ff;
+            --green: #3fb950;
+            --yellow: #d29922;
+            --pink: #f778ba;
+            --cyan: #39c5cf;
+            --purple: #bc8cff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 80px 0 60px;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+
+        .hero h1 span { color: var(--accent); }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--muted);
+            max-width: 600px;
+            margin: 0 auto 32px;
+        }
+
+        .badges {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 32px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        .cta {
+            display: inline-block;
+            padding: 12px 28px;
+            background: var(--accent);
+            color: var(--bg);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: opacity 0.2s;
+        }
+
+        .cta:hover { opacity: 0.85; }
+
+        /* Terminal Windows */
+        .terminal {
+            background: #1a1b26;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 40px 0;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            border: 1px solid var(--border);
+        }
+
+        /* macOS bar */
+        .terminal-bar.macos {
+            background: #2a2b36;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f57; }
+        .terminal-dot.yellow { background: #febc2e; }
+        .terminal-dot.green { background: #28c840; }
+
+        /* Windows Terminal bar */
+        .terminal-bar.windows {
+            background: #1f1f1f;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .wt-tabs {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .wt-tab {
+            background: #2d2d2d;
+            padding: 6px 16px;
+            font-size: 0.75rem;
+            font-family: 'Segoe UI', sans-serif;
+            color: var(--text);
+            border-radius: 6px 6px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .wt-tab .tab-icon { font-size: 0.85rem; }
+
+        .wt-controls {
+            display: flex;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .wt-controls span { cursor: default; }
+
+        /* Ubuntu/GNOME bar */
+        .terminal-bar.ubuntu {
+            background: #300a24;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .ubuntu-title {
+            flex: 1;
+            text-align: center;
+            font-size: 0.8rem;
+            font-family: 'Ubuntu', 'Cantarell', sans-serif;
+            color: #e0d0d8;
+            font-weight: 700;
+        }
+
+        .ubuntu-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ubuntu-btn {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: none;
+        }
+
+        .ubuntu-btn.close { background: #e95420; }
+        .ubuntu-btn.min { background: #5e5c64; }
+        .ubuntu-btn.max { background: #5e5c64; }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-family: monospace;
+        }
+
+        .terminal-body {
+            padding: 16px 20px;
+            font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', Consolas, monospace;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+
+        .terminal-body pre {
+            margin: 0;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+            white-space: pre;
+        }
+
+        .terminal-body .h1 { color: var(--yellow); font-weight: bold; }
+        .terminal-body .h2 { color: var(--cyan); font-weight: bold; }
+        .terminal-body .h3 { color: var(--green); font-weight: bold; }
+        .terminal-body .bold { font-weight: bold; color: var(--text); }
+        .terminal-body .italic { font-style: italic; }
+        .terminal-body .code-inline { background: #2d333b; padding: 1px 5px; border-radius: 3px; color: var(--muted); }
+        .terminal-body .link { color: var(--accent); text-decoration: underline; }
+        .terminal-body .url { color: var(--muted); }
+        .terminal-body .kw { color: var(--pink); }
+        .terminal-body .str { color: var(--green); }
+        .terminal-body .comment { color: #565f89; }
+        .terminal-body .border { color: #565f89; }
+        .terminal-body .table-header { font-weight: bold; }
+        .terminal-body .quote-bar { color: #565f89; }
+        .terminal-body .quote-text { font-style: italic; color: var(--muted); }
+
+        .terminal-status {
+            background: #e6edf3;
+            color: #1a1b26;
+            padding: 4px 16px;
+            font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+            font-size: 0.72rem;
+        }
+
+        .terminal-keys {
+            background: #2a2b36;
+            padding: 6px 16px;
+            font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+            font-size: 0.72rem;
+            color: var(--muted);
+        }
+
+        .terminal-keys kbd {
+            background: #3a3b46;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: var(--text);
+            font-size: 0.68rem;
+        }
+
+        /* Features */
+        .features {
+            padding: 60px 0;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 40px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+            color: var(--accent);
+        }
+
+        .feature-card p {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        /* Install */
+        .install {
+            padding: 60px 0;
+            text-align: center;
+        }
+
+        .install h2 {
+            font-size: 2rem;
+            margin-bottom: 16px;
+        }
+
+        .install p {
+            color: var(--muted);
+            margin-bottom: 24px;
+        }
+
+        .install-code {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 24px;
+            font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+            font-size: 0.8rem;
+            display: inline-block;
+            text-align: left;
+        }
+
+        .install-code pre {
+            margin: 0;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: 1.6;
+            color: var(--text);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-top: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            padding: 10px 24px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            color: var(--muted);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .tab:hover { color: var(--text); background: var(--surface); }
+        .tab.active { color: var(--accent); background: var(--surface); border-color: var(--border); }
+
+        .tab-content {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+            padding: 24px;
+            text-align: left;
+        }
+
+        .tab-content .install-code {
+            display: block;
+            border: none;
+            padding: 0;
+            background: transparent;
+            border-radius: 0;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 0;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <section class="hero">
+        <h1><span>mdr</span></h1>
+        <p>A beautiful, cross-platform terminal markdown renderer. Read docs, READMEs, and notes without leaving your shell.</p>
+        <div class="badges">
+            <span class="badge">.NET 9</span>
+            <span class="badge">Windows</span>
+            <span class="badge">macOS</span>
+            <span class="badge">Linux</span>
+            <span class="badge">x64 + ARM64</span>
+            <span class="badge">MIT License</span>
+        </div>
+        <a href="https://github.com/michaelsanford/mdr/releases/latest" class="cta">Download Latest Release</a>
+        <div id="latest-version" style="margin-top:12px;font-size:0.85rem;color:var(--muted);"></div>
+    </section>
+
+    <!-- Screenshot 1: Windows Terminal -->
+    <div class="terminal">
+        <div class="terminal-bar windows">
+            <div class="wt-tabs">
+                <div class="wt-tab"><span class="tab-icon">⌨</span> PowerShell</div>
+            </div>
+            <div class="wt-controls">
+                <span>─</span>
+                <span>□</span>
+                <span>✕</span>
+            </div>
+        </div>
+        <div class="terminal-body">
+<pre><span class="h1"># Getting Started</span>
+
+Welcome to the project. This guide covers <span class="bold">installation</span>,
+<span class="italic">configuration</span>, and basic usage of <span class="code-inline">mdr</span>.
+
+<span class="h2">## Installation</span>
+
+Download the latest release from <span class="link">GitHub</span> <span class="url">(https://github.com/michaelsanford/mdr)</span>
+
+<span class="h3">### From Source</span>
+
+• Clone the repository
+• Run <span class="code-inline">dotnet build -c Release</span>
+• Copy the binary to your PATH
+
+<span class="quote-bar">│</span> <span class="quote-text">mdr adapts to your terminal width automatically.</span></pre>
+        </div>
+        <div class="terminal-status">
+            &nbsp;README.md │ 1–24 of 86 lines │ 28%
+        </div>
+        <div class="terminal-keys">
+            &nbsp;<kbd>↑↓</kbd> scroll &nbsp;<kbd>PgUp</kbd> page up &nbsp;<kbd>PgDn</kbd> page down &nbsp;<kbd>Home</kbd> top &nbsp;<kbd>End</kbd> bottom &nbsp;<kbd>t</kbd> Monokai &nbsp;<kbd>q</kbd> quit
+        </div>
+    </div>
+
+    <!-- Screenshot 2: macOS Terminal -->
+    <div class="terminal">
+        <div class="terminal-bar macos">
+            <div class="terminal-dot red"></div>
+            <div class="terminal-dot yellow"></div>
+            <div class="terminal-dot green"></div>
+            <div class="terminal-title">mdr SAMPLE.md</div>
+        </div>
+        <div class="terminal-body">
+<pre><span class="h2">## Code Blocks</span>
+
+<span class="border">╭─</span><span class="kw">csharp</span><span class="border">─────────────────────────────────────────────────────╮</span>
+<span class="border">│</span> <span class="kw">using</span> System;                                              <span class="border">│</span>
+<span class="border">│</span>                                                            <span class="border">│</span>
+<span class="border">│</span> <span class="kw">public</span> <span class="kw">class</span> Program                                       <span class="border">│</span>
+<span class="border">│</span> {                                                          <span class="border">│</span>
+<span class="border">│</span>     <span class="kw">public</span> <span class="kw">static</span> <span class="kw">async</span> Task Main(<span class="kw">string</span>[] args)           <span class="border">│</span>
+<span class="border">│</span>     {                                                      <span class="border">│</span>
+<span class="border">│</span>         <span class="kw">var</span> message = <span class="str">"Hello, World!"</span>;                     <span class="border">│</span>
+<span class="border">│</span>         Console.WriteLine(message);  <span class="comment">// Print it</span>           <span class="border">│</span>
+<span class="border">│</span>     }                                                      <span class="border">│</span>
+<span class="border">│</span> }                                                          <span class="border">│</span>
+<span class="border">╰────────────────────────────────────────────────────────────╯</span></pre>
+        </div>
+        <div class="terminal-status">
+            &nbsp;SAMPLE.md │ 42–65 of 255 lines │ 25%
+        </div>
+        <div class="terminal-keys">
+            &nbsp;<kbd>↑↓</kbd> scroll &nbsp;<kbd>PgUp</kbd> page up &nbsp;<kbd>PgDn</kbd> page down &nbsp;<kbd>Home</kbd> top &nbsp;<kbd>End</kbd> bottom &nbsp;<kbd>t</kbd> Dracula &nbsp;<kbd>q</kbd> quit
+        </div>
+    </div>
+
+    <!-- Screenshot 3: Ubuntu/GNOME Terminal -->
+    <div class="terminal" style="background: #300a24;">
+        <div class="terminal-bar ubuntu">
+            <div class="ubuntu-controls">
+                <div class="ubuntu-btn close"></div>
+                <div class="ubuntu-btn min"></div>
+                <div class="ubuntu-btn max"></div>
+            </div>
+            <div class="ubuntu-title">mdr SAMPLE.md</div>
+            <div style="width: 62px;"></div>
+        </div>
+        <div class="terminal-body" style="background: #300a24;">
+<pre><span class="h2">## Supported Languages</span>
+
+<span class="border">╭──────────────┬───────────┬──────────┬──────╮</span>
+<span class="border">│</span> <span class="table-header">Language</span>     <span class="border">│</span> <span class="table-header">Extension</span> <span class="border">│</span> <span class="table-header">Keywords</span> <span class="border">│</span> <span class="table-header">Year</span> <span class="border">│</span>
+<span class="border">├──────────────┼───────────┼──────────┼──────┤</span>
+<span class="border">│</span> C#           <span class="border">│</span> .cs       <span class="border">│</span> 34       <span class="border">│</span> 2000 <span class="border">│</span>
+<span class="border">│</span> JavaScript   <span class="border">│</span> .js       <span class="border">│</span> 24       <span class="border">│</span> 1995 <span class="border">│</span>
+<span class="border">│</span> TypeScript   <span class="border">│</span> .ts       <span class="border">│</span> 24       <span class="border">│</span> 2012 <span class="border">│</span>
+<span class="border">│</span> Python       <span class="border">│</span> .py       <span class="border">│</span> 27       <span class="border">│</span> 1991 <span class="border">│</span>
+<span class="border">│</span> Rust         <span class="border">│</span> .rs       <span class="border">│</span> 24       <span class="border">│</span> 2010 <span class="border">│</span>
+<span class="border">│</span> Go           <span class="border">│</span> .go       <span class="border">│</span> 21       <span class="border">│</span> 2009 <span class="border">│</span>
+<span class="border">╰──────────────┴───────────┴──────────┴──────╯</span></pre>
+        </div>
+        <div class="terminal-status" style="background: #e95420; color: #fff;">
+            &nbsp;SAMPLE.md │ 180–203 of 255 lines │ 80%
+        </div>
+        <div class="terminal-keys" style="background: #3b0b2b;">
+            &nbsp;<kbd>↑↓</kbd> scroll &nbsp;<kbd>PgUp</kbd> page up &nbsp;<kbd>PgDn</kbd> page down &nbsp;<kbd>Home</kbd> top &nbsp;<kbd>End</kbd> bottom &nbsp;<kbd>t</kbd> Nord &nbsp;<kbd>q</kbd> quit
+        </div>
+    </div>
+
+    <!-- Features -->
+    <section class="features">
+        <h2>Features</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>Rich Formatting</h3>
+                <p>Headings, bold, italic, inline code, blockquotes, and links — all rendered with native ANSI terminal formatting.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Syntax Highlighting</h3>
+                <p>Code blocks with keyword highlighting for C#, JavaScript, TypeScript, Python, Rust, and Go.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Full-Width Tables</h3>
+                <p>Tables render with rounded Unicode borders, automatically scaled to fill your terminal width.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Interactive Pager</h3>
+                <p>Scroll through long documents with vim-style keybindings. Short output prints directly.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Color Schemes</h3>
+                <p>Cycle through Monokai, Dracula, Nord, GitHub Dark, Solarized, and Catppuccin with a single keypress.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Fully Private</h3>
+                <p>No telemetry, no network requests, no data collection. Everything runs locally on your machine.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Install -->
+    <section class="install">
+        <h2>Install</h2>
+        <p>Each release is a self-contained, statically-linked single-file binary. No installer, no runtime dependencies — just download, verify, and run.</p>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('windows')">Windows</button>
+            <button class="tab" onclick="showTab('macos')">macOS</button>
+            <button class="tab" onclick="showTab('linux')">Linux</button>
+        </div>
+        <div class="tab-content" id="tab-windows">
+            <div class="install-code">
+<pre># Download (x64 or ARM64)
+iwr "https://github.com/michaelsanford/mdr/releases/latest/download/mdr-vX.Y.Z-win-x64.exe" -Out mdr.exe
+
+# Verify attestation
+gh attestation verify mdr.exe --owner michaelsanford
+
+# Verify signature
+cosign verify-blob mdr.exe `
+  --bundle mdr-vX.Y.Z-win-x64.exe.bundle `
+  --certificate-identity-regexp "github.com/michaelsanford/mdr" `
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+# Run
+.\mdr.exe README.md</pre>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-macos" style="display:none;">
+            <div class="install-code">
+<pre># Download (Apple Silicon or Intel)
+curl -LO https://github.com/michaelsanford/mdr/releases/latest/download/mdr-vX.Y.Z-osx-arm64
+
+# Verify attestation
+gh attestation verify mdr-vX.Y.Z-osx-arm64 --owner michaelsanford
+
+# Verify signature
+cosign verify-blob mdr-vX.Y.Z-osx-arm64 \
+  --bundle mdr-vX.Y.Z-osx-arm64.bundle \
+  --certificate-identity-regexp "github.com/michaelsanford/mdr" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+# Make executable and run
+chmod +x mdr-vX.Y.Z-osx-arm64
+./mdr-vX.Y.Z-osx-arm64 README.md</pre>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-linux" style="display:none;">
+            <div class="install-code">
+<pre># Download (x64, ARM64, or musl variants)
+curl -LO https://github.com/michaelsanford/mdr/releases/latest/download/mdr-vX.Y.Z-linux-x64
+
+# Verify attestation
+gh attestation verify mdr-vX.Y.Z-linux-x64 --owner michaelsanford
+
+# Verify signature
+cosign verify-blob mdr-vX.Y.Z-linux-x64 \
+  --bundle mdr-vX.Y.Z-linux-x64.bundle \
+  --certificate-identity-regexp "github.com/michaelsanford/mdr" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+# Make executable and run
+chmod +x mdr-vX.Y.Z-linux-x64
+./mdr-vX.Y.Z-linux-x64 README.md</pre>
+            </div>
+        </div>
+
+        <p style="margin-top: 24px;">Or build from source:</p>
+        <div class="install-code">
+<pre># Requires .NET 9 SDK
+dotnet publish -c Release --self-contained</pre>
+        </div>
+    </section>
+</div>
+
+<footer>
+    <div class="container">
+        <p>
+            <a href="https://github.com/michaelsanford/mdr">GitHub</a> ·
+            <a href="https://github.com/michaelsanford/mdr/releases">Releases</a> ·
+            <a href="https://github.com/michaelsanford/mdr/blob/main/PRIVACY.md">Privacy</a> ·
+            MIT License
+        </p>
+        <p>Made with ❤ by <a href="https://www.michaelsanford.com/">Michael</a></p>
+    </div>
+</footer>
+
+<script>
+function showTab(platform) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + platform).style.display = 'block';
+    event.target.classList.add('active');
+}
+
+fetch('https://api.github.com/repos/michaelsanford/mdr/releases/latest')
+    .then(r => r.json())
+    .then(data => {
+        if (data.tag_name) {
+            document.querySelectorAll('.tab-content pre, .install-code pre').forEach(el => {
+                el.textContent = el.textContent.replaceAll('vX.Y.Z', data.tag_name);
+            });
+            document.getElementById('latest-version').textContent = 'Latest: ' + data.tag_name;
+        }
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>
