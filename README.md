@@ -4,6 +4,7 @@
 [![Release](https://github.com/michaelsanford/mdr/actions/workflows/release.yml/badge.svg)](https://github.com/michaelsanford/mdr/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/michaelsanford/mdr)](https://github.com/michaelsanford/mdr/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/michaelsanford/mdr)](LICENSE)
+[![Security](https://img.shields.io/badge/security-aikido-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDMgN3Y1YzAgNS41NSAzLjg0IDEwLjc0IDkgMTIgNS4xNi0xLjI2IDktNi40NSA5LTEyVjdMMTIgMnoiLz48L3N2Zz4=)](https://app.aikido.dev/)
 
 ![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)
 ![Windows](https://img.shields.io/badge/Windows-x64%20|%20ARM64-0078D4?logo=windows)
