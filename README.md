@@ -2,12 +2,15 @@
 
 [![CI](https://github.com/michaelsanford/mdr/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelsanford/mdr/actions/workflows/ci.yml)
 [![Release](https://github.com/michaelsanford/mdr/actions/workflows/release.yml/badge.svg)](https://github.com/michaelsanford/mdr/actions/workflows/release.yml)
-[![GitHub release](https://img.shields.io/github/v/release/michaelsanford/mdr)](https://github.com/michaelsanford/mdr/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/michaelsanford/mdr)](LICENSE)
+![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)
 [![Security](https://img.shields.io/badge/security-aikido-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDMgN3Y1YzAgNS41NSAzLjg0IDEwLjc0IDkgMTIgNS4xNi0xLjI2IDktNi40NSA5LTEyVjdMMTIgMnoiLz48L3N2Zz4=)](https://app.aikido.dev/)
 
-![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)
+[![GitHub release](https://img.shields.io/github/v/release/michaelsanford/mdr)](https://github.com/michaelsanford/mdr/releases/latest)
+
 ![Windows](https://img.shields.io/badge/Windows-x64%20|%20ARM64-0078D4?logo=windows)
+[![Winget](https://github.com/michaelsanford/mdr/actions/workflows/winget.yml/badge.svg)](https://github.com/michaelsanford/mdr/actions/workflows/winget.yml)
+
 ![macOS](https://img.shields.io/badge/macOS-x64%20|%20ARM64-000000?logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-x64%20|%20ARM64-FCC624?logo=linux&logoColor=black)
 
@@ -31,15 +34,23 @@ Renders markdown with full ANSI formatting — bold, italic, colors, syntax-high
 
 ## Install
 
+### winget (Windows)
+
+```powershell
+winget install michaelsanford.mdr
+```
+
+### From source
+
 Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
 
-```sh
+```powershell
 dotnet build -c Release
 ```
 
 Or publish a self-contained binary for your platform:
 
-```sh
+```powershell
 dotnet publish -c Release -r linux-x64 --self-contained
 dotnet publish -c Release -r osx-arm64 --self-contained
 dotnet publish -c Release -r win-x64 --self-contained
@@ -47,12 +58,15 @@ dotnet publish -c Release -r win-x64 --self-contained
 
 ## Usage
 
-```sh
+```powershell
 # Render a file
 mdr README.md
 
-# Pipe from stdin
+# Pipe from stdin (bash)
 cat README.md | mdr -
+
+# Pipe from stdin (PowerShell)
+Get-Content README.md | mdr -
 ```
 
 When output exceeds the terminal height, mdr enters an interactive pager. If output is piped or fits on screen, it prints directly.

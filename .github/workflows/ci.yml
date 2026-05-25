@@ -5,14 +5,18 @@ on:
     branches: [main]
     paths-ignore:
       - '**.md'
+      - 'docs/**'
       - '.github/FUNDING.yml'
       - '.github/workflows/release.yml'
+      - '.github/workflows/winget.yml'
   pull_request:
     branches: [main]
     paths-ignore:
       - '**.md'
+      - 'docs/**'
       - '.github/FUNDING.yml'
       - '.github/workflows/release.yml'
+      - '.github/workflows/winget.yml'
 
 permissions:
   contents: read

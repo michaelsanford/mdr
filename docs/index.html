@@ -380,9 +380,58 @@
 
         footer a { color: var(--accent); text-decoration: none; }
         footer a:hover { text-decoration: underline; }
+
+        /* Nav */
+        nav {
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 0;
+            z-index: 100;
+        }
+
+        nav .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        nav .nav-brand {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        nav .nav-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        nav .nav-links a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.15s;
+        }
+
+        nav .nav-links a:hover { color: var(--text); }
     </style>
 </head>
 <body>
+
+<nav>
+    <div class="container">
+        <a href="#" class="nav-brand">mdr</a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#install">Install</a>
+            <a href="https://github.com/michaelsanford/mdr">GitHub</a>
+        </div>
+    </div>
+</nav>
 
 <div class="container">
     <section class="hero">
@@ -396,7 +445,12 @@
             <span class="badge">x64 + ARM64</span>
             <span class="badge">MIT License</span>
         </div>
-        <a href="https://github.com/michaelsanford/mdr/releases/latest" class="cta">Download Latest Release</a>
+        <div style="margin-bottom: 20px;">
+            <div class="install-code" style="display: inline-block;">
+<pre><span style="color: var(--cyan);">❯</span> <span style="color: var(--pink);">winget</span> install michaelsanford.mdr</pre>
+            </div>
+        </div>
+        <a href="https://github.com/michaelsanford/mdr/releases/latest" class="cta" style="font-size:0.85rem;padding:8px 18px;">Download Latest Release</a>
         <div id="latest-version" style="margin-top:12px;font-size:0.85rem;color:var(--muted);"></div>
     </section>
 
@@ -504,7 +558,7 @@ Download the latest release from <span class="link">GitHub</span> <span class="u
     </div>
 
     <!-- Features -->
-    <section class="features">
+    <section class="features" id="features">
         <h2>Features</h2>
         <div class="feature-grid">
             <div class="feature-card">
@@ -535,7 +589,7 @@ Download the latest release from <span class="link">GitHub</span> <span class="u
     </section>
 
     <!-- Install -->
-    <section class="install">
+    <section class="install" id="install">
         <h2>Install</h2>
         <p>Each release is a self-contained, statically-linked single-file binary. No installer, no runtime dependencies — just download, verify, and run.</p>
 
@@ -634,7 +688,7 @@ fetch('https://api.github.com/repos/michaelsanford/mdr/releases/latest')
     .then(data => {
         if (data.tag_name) {
             document.querySelectorAll('.tab-content pre, .install-code pre').forEach(el => {
-                el.textContent = el.textContent.replaceAll('vX.Y.Z', data.tag_name);
+                el.innerHTML = el.innerHTML.replaceAll('vX.Y.Z', data.tag_name);
             });
             document.getElementById('latest-version').textContent = 'Latest: ' + data.tag_name;
         }
