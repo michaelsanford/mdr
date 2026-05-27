@@ -33,13 +33,29 @@ if (args.Length > 0 && args[0] != "-")
         AnsiConsole.MarkupLine($"[red]File not found:[/] {args[0]}");
         return 1;
     }
-    markdown = File.ReadAllText(args[0]);
+    try
+    {
+        markdown = File.ReadAllText(args[0]);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        AnsiConsole.MarkupLine($"[red]Error reading file:[/] {ex.Message}");
+        return 1;
+    }
     fileName = Path.GetFileName(args[0]);
 }
 else
 {
-    using var reader = new StreamReader(Console.OpenStandardInput());
-    markdown = reader.ReadToEnd();
+    try
+    {
+        using var reader = new StreamReader(Console.OpenStandardInput());
+        markdown = reader.ReadToEnd();
+    }
+    catch (IOException ex)
+    {
+        AnsiConsole.MarkupLine($"[red]Error reading stdin:[/] {ex.Message}");
+        return 1;
+    }
 }
 
 var width = AnsiConsole.Console.Profile.Width;
@@ -61,6 +77,14 @@ if (!AnsiConsole.Console.Profile.Capabilities.Interactive || lines.Count <= Cons
 var pageHeight = Console.WindowHeight - 2;
 int offset = 0;
 int maxOffset = Math.Max(0, lines.Count - pageHeight);
+
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true;
+    Console.Clear();
+    Console.CursorVisible = true;
+    Environment.Exit(0);
+};
 
 Console.CursorVisible = false;
 Console.Clear();
@@ -153,6 +177,11 @@ class TerminalRenderer
 
     public TerminalRenderer(int width, ColorScheme cs) { _width = width; _cs = cs; }
 
+    // Compiled once at class load — reused across all rendering calls
+    private static readonly Regex _ansiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
+    private static readonly Regex _stringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
+    private static readonly Regex _commentRegex = new(@"(//.*|#\s.*)",    RegexOptions.Compiled);
+
     public List<string> RenderToLines(MarkdownDocument doc)
     {
         var output = new List<string>();
@@ -242,7 +271,12 @@ class TerminalRenderer
                     if (child is ParagraphBlock p)
                     {
                         var text = RenderInlines(p.Inline);
-                        output.Add($"{pad}{prefix}{text}");
+                        var availWidth = Math.Max(1, _width - pad.Length - prefix.Length);
+                        var wrapped = WrapText(text, availWidth);
+                        output.Add($"{pad}{prefix}{(wrapped.Count > 0 ? wrapped[0] : "")}");
+                        var continuation = new string(' ', prefix.Length);
+                        for (int wi = 1; wi < wrapped.Count; wi++)
+                            output.Add($"{pad}{continuation}{wrapped[wi]}");
                         prefix = "  ";
                     }
                     else if (child is ListBlock nested)
@@ -339,15 +373,20 @@ class TerminalRenderer
         var keywords = GetKeywords(lang);
         if (keywords.Length == 0) return line;
 
-        var result = Regex.Replace(line, @"""[^""]*""", m => $"\x1b[{_cs.String}m{m.Value}\x1b[0m");
-        result = Regex.Replace(result, @"(//.*|#\s.*)", m => $"\x1b[{_cs.Comment}m{m.Value}\x1b[0m");
+        // Keywords are matched first on the PLAIN line so that \b word boundaries
+        // are never confused by ANSI escape codes (which end in 'm', a word char).
+        var result = line;
         foreach (var kw in keywords)
             result = Regex.Replace(result, $@"\b{Regex.Escape(kw)}\b", $"\x1b[{_cs.Keyword}m{kw}\x1b[0m");
+
+        // String literals and comments are applied after and take visual priority —
+        // their spans re-colour anything (including keyword highlights) they contain.
+        result = _stringRegex.Replace(result,  m => $"\x1b[{_cs.String}m{m.Value}\x1b[0m");
+        result = _commentRegex.Replace(result, m => $"\x1b[{_cs.Comment}m{m.Value}\x1b[0m");
         return result;
     }
 
-    private static int VisibleLength(string s) =>
-        Regex.Replace(s, @"\x1b\[[0-9;]*m", "").Length;
+    private static int VisibleLength(string s) => _ansiRegex.Replace(s, "").Length;
 
     private static string[] GetKeywords(string lang) => lang.ToLowerInvariant() switch
     {
