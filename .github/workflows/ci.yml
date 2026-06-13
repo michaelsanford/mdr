@@ -35,8 +35,8 @@ jobs:
         with:
           dotnet-version: '9.x'
 
-      - name: Restore
-        run: dotnet restore --locked-mode
+      - name: Restore (${{ matrix.rid }})
+        run: dotnet restore mdr.csproj --runtime ${{ matrix.rid }}
 
       - name: Build
         run: dotnet build --configuration Release --no-restore
@@ -46,4 +46,5 @@ jobs:
           dotnet publish mdr.csproj \
             --configuration Release \
             --runtime ${{ matrix.rid }} \
-            --self-contained
+            --self-contained \
+            --no-restore

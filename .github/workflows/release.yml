@@ -51,8 +51,8 @@ jobs:
         with:
           dotnet-version: '9.x'
 
-      - name: Restore
-        run: dotnet restore mdr.csproj --locked-mode
+      - name: Restore (${{ matrix.rid }})
+        run: dotnet restore mdr.csproj --runtime ${{ matrix.rid }}
 
       - name: Publish self-contained binary
         run: |
