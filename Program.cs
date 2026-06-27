@@ -90,8 +90,31 @@ Console.CursorVisible = false;
 Console.Clear();
 DrawPage(lines, offset, pageHeight, fileName, width, schemes[schemeIndex]);
 
+int lastWidth = Console.WindowWidth;
+int lastHeight = Console.WindowHeight;
+
 while (true)
 {
+    while (!Console.KeyAvailable)
+    {
+        Thread.Sleep(50);
+        int currentWidth = Console.WindowWidth;
+        int currentHeight = Console.WindowHeight;
+        if (currentWidth != lastWidth || currentHeight != lastHeight)
+        {
+            lastWidth = currentWidth;
+            lastHeight = currentHeight;
+            width = lastWidth;
+            pageHeight = Math.Max(1, lastHeight - 2);
+            renderer = new TerminalRenderer(width, schemes[schemeIndex]);
+            lines = renderer.RenderToLines(doc);
+            maxOffset = Math.Max(0, lines.Count - pageHeight);
+            offset = Math.Min(offset, maxOffset);
+            Console.Clear();
+            DrawPage(lines, offset, pageHeight, fileName, width, schemes[schemeIndex]);
+        }
+    }
+
     var key = Console.ReadKey(true);
     int prevOffset = offset;
     bool redraw = false;
@@ -135,6 +158,22 @@ while (true)
             Console.Clear();
             Console.CursorVisible = true;
             return 0;
+    }
+
+    int w = Console.WindowWidth;
+    int h = Console.WindowHeight;
+    if (w != lastWidth || h != lastHeight)
+    {
+        lastWidth = w;
+        lastHeight = h;
+        width = lastWidth;
+        pageHeight = Math.Max(1, lastHeight - 2);
+        renderer = new TerminalRenderer(width, schemes[schemeIndex]);
+        lines = renderer.RenderToLines(doc);
+        maxOffset = Math.Max(0, lines.Count - pageHeight);
+        offset = Math.Min(offset, maxOffset);
+        Console.Clear();
+        redraw = true;
     }
 
     if (offset != prevOffset || redraw)
@@ -181,6 +220,7 @@ class TerminalRenderer
     private static readonly Regex _ansiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
     private static readonly Regex _stringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
     private static readonly Regex _commentRegex = new(@"(//.*|#\s.*)",    RegexOptions.Compiled);
+    private static readonly Dictionary<string, Regex?> _keywordRegexCache = new();
 
     public List<string> RenderToLines(MarkdownDocument doc)
     {
@@ -370,14 +410,28 @@ class TerminalRenderer
     private string HighlightLine(string line, string lang)
     {
         if (string.IsNullOrEmpty(lang)) return line;
-        var keywords = GetKeywords(lang);
-        if (keywords.Length == 0) return line;
+        
+        var lowerLang = lang.ToLowerInvariant();
+        if (!_keywordRegexCache.TryGetValue(lowerLang, out var keywordRegex))
+        {
+            var keywords = GetKeywords(lowerLang);
+            if (keywords.Length > 0)
+            {
+                var pattern = $@"\b(?:{string.Join("|", keywords.Select(Regex.Escape))})\b";
+                keywordRegex = new Regex(pattern, RegexOptions.Compiled);
+            }
+            else
+            {
+                keywordRegex = null;
+            }
+            _keywordRegexCache[lowerLang] = keywordRegex;
+        }
 
-        // Keywords are matched first on the PLAIN line so that \b word boundaries
-        // are never confused by ANSI escape codes (which end in 'm', a word char).
         var result = line;
-        foreach (var kw in keywords)
-            result = Regex.Replace(result, $@"\b{Regex.Escape(kw)}\b", $"\x1b[{_cs.Keyword}m{kw}\x1b[0m");
+        if (keywordRegex != null)
+        {
+            result = keywordRegex.Replace(result, m => $"\x1b[{_cs.Keyword}m{m.Value}\x1b[0m");
+        }
 
         // String literals and comments are applied after and take visual priority —
         // their spans re-colour anything (including keyword highlights) they contain.
@@ -386,7 +440,7 @@ class TerminalRenderer
         return result;
     }
 
-    private static int VisibleLength(string s) => _ansiRegex.Replace(s, "").Length;
+    private static int VisibleLength(string s) => s.Contains('\x1b') ? _ansiRegex.Replace(s, "").Length : s.Length;
 
     private static string[] GetKeywords(string lang) => lang.ToLowerInvariant() switch
     {
