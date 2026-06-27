@@ -4,6 +4,8 @@
 
 version: "1.0"
 linter: qodana-cdnet
+dotnet:
+  project: mdr.csproj
 profile:
   name: qodana.recommended
 include:
