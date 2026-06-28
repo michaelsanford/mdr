@@ -209,18 +209,16 @@ static void DrawPage(List<string> lines, int offset, int pageHeight, string file
 }
 
 // --- Renderer ---
-class TerminalRenderer
+class TerminalRenderer(int width, ColorScheme cs)
 {
-    private readonly int _width;
-    private readonly ColorScheme _cs;
-
-    public TerminalRenderer(int width, ColorScheme cs) { _width = width; _cs = cs; }
+    private readonly int _width = width;
+    private readonly ColorScheme _cs = cs;
 
     // Compiled once at class load — reused across all rendering calls
-    private static readonly Regex _ansiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
-    private static readonly Regex _stringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
-    private static readonly Regex _commentRegex = new(@"(//.*|#\s.*)",    RegexOptions.Compiled);
-    private static readonly Dictionary<string, Regex?> _keywordRegexCache = new();
+    private static readonly Regex AnsiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
+    private static readonly Regex StringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
+    private static readonly Regex CommentRegex = new(@"(//.*|#\s.*)",    RegexOptions.Compiled);
+    private static readonly Dictionary<string, Regex?> KeywordRegexCache = new();
 
     public List<string> RenderToLines(MarkdownDocument doc)
     {
@@ -412,7 +410,7 @@ class TerminalRenderer
         if (string.IsNullOrEmpty(lang)) return line;
         
         var lowerLang = lang.ToLowerInvariant();
-        if (!_keywordRegexCache.TryGetValue(lowerLang, out var keywordRegex))
+        if (!KeywordRegexCache.TryGetValue(lowerLang, out var keywordRegex))
         {
             var keywords = GetKeywords(lowerLang);
             if (keywords.Length > 0)
@@ -424,7 +422,7 @@ class TerminalRenderer
             {
                 keywordRegex = null;
             }
-            _keywordRegexCache[lowerLang] = keywordRegex;
+            KeywordRegexCache[lowerLang] = keywordRegex;
         }
 
         var result = line;
@@ -435,12 +433,12 @@ class TerminalRenderer
 
         // String literals and comments are applied after and take visual priority —
         // their spans re-colour anything (including keyword highlights) they contain.
-        result = _stringRegex.Replace(result,  m => $"\x1b[{_cs.String}m{m.Value}\x1b[0m");
-        result = _commentRegex.Replace(result, m => $"\x1b[{_cs.Comment}m{m.Value}\x1b[0m");
+        result = StringRegex.Replace(result,  m => $"\x1b[{_cs.String}m{m.Value}\x1b[0m");
+        result = CommentRegex.Replace(result, m => $"\x1b[{_cs.Comment}m{m.Value}\x1b[0m");
         return result;
     }
 
-    private static int VisibleLength(string s) => s.Contains('\x1b') ? _ansiRegex.Replace(s, "").Length : s.Length;
+    private static int VisibleLength(string s) => s.Contains('\x1b') ? AnsiRegex.Replace(s, "").Length : s.Length;
 
     private static string[] GetKeywords(string lang) => lang.ToLowerInvariant() switch
     {
@@ -480,7 +478,7 @@ class TerminalRenderer
                     sb.Append('\n');
                     break;
                 default:
-                    sb.Append(inline.ToString());
+                    sb.Append(inline);
                     break;
             }
         }
@@ -495,7 +493,7 @@ class TerminalRenderer
         {
             if (inline is LiteralInline lit) sb.Append(lit.Content.ToString());
             else if (inline is ContainerInline container) sb.Append(GetInlineText(container));
-            else sb.Append(inline.ToString());
+            else sb.Append(inline);
         }
         return sb.ToString();
     }
@@ -504,7 +502,7 @@ class TerminalRenderer
     {
         var sb = new StringBuilder();
         foreach (var block in cell)
-            if (block is ParagraphBlock p && p.Inline != null)
+            if (block is ParagraphBlock { Inline: not null } p)
                 sb.Append(GetInlineText(p.Inline));
         return sb.ToString();
     }
