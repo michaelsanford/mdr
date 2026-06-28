@@ -211,9 +211,6 @@ static void DrawPage(List<string> lines, int offset, int pageHeight, string file
 // --- Renderer ---
 class TerminalRenderer(int width, ColorScheme cs)
 {
-    private readonly int _width = width;
-    private readonly ColorScheme _cs = cs;
-
     // Compiled once at class load — reused across all rendering calls
     private static readonly Regex AnsiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
     private static readonly Regex StringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
@@ -235,14 +232,14 @@ class TerminalRenderer(int width, ColorScheme cs)
             case HeadingBlock h:
                 var level = h.Level;
                 var text = GetInlineText(h.Inline);
-                var color = level switch { 1 => _cs.Heading1, 2 => _cs.Heading2, 3 => _cs.Heading3, _ => _cs.Heading4 };
+                var color = level switch { 1 => cs.Heading1, 2 => cs.Heading2, 3 => cs.Heading3, _ => cs.Heading4 };
                 output.Add($"\x1b[{color}m{new string('#', level)} {text}\x1b[0m");
                 output.Add("");
                 break;
 
             case ParagraphBlock p:
                 var paraText = RenderInlines(p.Inline);
-                foreach (var line in WrapText(paraText, _width))
+                foreach (var line in WrapText(paraText, width))
                     output.Add(line);
                 output.Add("");
                 break;
@@ -271,7 +268,7 @@ class TerminalRenderer(int width, ColorScheme cs)
                 break;
 
             case ThematicBreakBlock:
-                output.Add($"\x1b[{_cs.Border}m{"".PadRight(_width, '─')}\x1b[0m");
+                output.Add($"\x1b[{cs.Border}m{"".PadRight(width, '─')}\x1b[0m");
                 output.Add("");
                 break;
 
@@ -281,7 +278,7 @@ class TerminalRenderer(int width, ColorScheme cs)
                     if (child is ParagraphBlock qp)
                     {
                         var qText = RenderInlines(qp.Inline);
-                        output.Add($"\x1b[{_cs.Border}m│\x1b[0m \x1b[3m{qText}\x1b[0m");
+                        output.Add($"\x1b[{cs.Border}m│\x1b[0m \x1b[3m{qText}\x1b[0m");
                     }
                     else RenderBlock(child, output);
                 }
@@ -309,7 +306,7 @@ class TerminalRenderer(int width, ColorScheme cs)
                     if (child is ParagraphBlock p)
                     {
                         var text = RenderInlines(p.Inline);
-                        var availWidth = Math.Max(1, _width - pad.Length - prefix.Length);
+                        var availWidth = Math.Max(1, width - pad.Length - prefix.Length);
                         var wrapped = WrapText(text, availWidth);
                         output.Add($"{pad}{prefix}{(wrapped.Count > 0 ? wrapped[0] : "")}");
                         var continuation = new string(' ', prefix.Length);
@@ -349,7 +346,7 @@ class TerminalRenderer(int width, ColorScheme cs)
 
         var totalContent = colWidths.Sum();
         var borderChars = 1 + colCount * 3;
-        var available = _width - borderChars;
+        var available = width - borderChars;
         if (totalContent > available && available > 0)
         {
             var scale = (double)available / totalContent;
@@ -357,7 +354,7 @@ class TerminalRenderer(int width, ColorScheme cs)
                 colWidths[i] = Math.Max(3, (int)(colWidths[i] * scale));
         }
 
-        var b = _cs.Border;
+        var b = cs.Border;
         var topBorder = "╭" + string.Join("┬", colWidths.Select(w => new string('─', w + 2))) + "╮";
         var midBorder = "├" + string.Join("┼", colWidths.Select(w => new string('─', w + 2))) + "┤";
         var botBorder = "╰" + string.Join("┴", colWidths.Select(w => new string('─', w + 2))) + "╯";
@@ -373,7 +370,7 @@ class TerminalRenderer(int width, ColorScheme cs)
                 if (cell.Length > colWidths[c]) cell = cell[..(colWidths[c] - 1)] + "…";
                 var padded = cell.PadRight(colWidths[c]);
                 if (r == 0)
-                    sb.Append($" \x1b[{_cs.Bold}m{padded}\x1b[0m \x1b[{b}m│\x1b[0m");
+                    sb.Append($" \x1b[{cs.Bold}m{padded}\x1b[0m \x1b[{b}m│\x1b[0m");
                 else
                     sb.Append($" {padded} \x1b[{b}m│\x1b[0m");
             }
@@ -385,13 +382,13 @@ class TerminalRenderer(int width, ColorScheme cs)
 
     private void RenderCodeBlock(string code, string lang, List<string> output)
     {
-        var innerWidth = _width - 4;
+        var innerWidth = width - 4;
         var codeLines = code.Split('\n');
-        var b = _cs.Border;
+        var b = cs.Border;
 
         var topLabel = string.IsNullOrEmpty(lang)
-            ? $"\x1b[{b}m╭{new string('─', _width - 2)}╮\x1b[0m"
-            : $"\x1b[{b}m╭─\x1b[{_cs.Keyword}m{lang}\x1b[{b}m{new string('─', Math.Max(0, _width - 4 - lang.Length))}╮\x1b[0m";
+            ? $"\x1b[{b}m╭{new string('─', width - 2)}╮\x1b[0m"
+            : $"\x1b[{b}m╭─\x1b[{cs.Keyword}m{lang}\x1b[{b}m{new string('─', Math.Max(0, width - 4 - lang.Length))}╮\x1b[0m";
         output.Add(topLabel);
 
         foreach (var line in codeLines)
@@ -402,7 +399,7 @@ class TerminalRenderer(int width, ColorScheme cs)
             output.Add($"\x1b[{b}m│\x1b[0m {highlighted}{new string(' ', padding)} \x1b[{b}m│\x1b[0m");
         }
 
-        output.Add($"\x1b[{b}m╰{new string('─', _width - 2)}╯\x1b[0m");
+        output.Add($"\x1b[{b}m╰{new string('─', width - 2)}╯\x1b[0m");
     }
 
     private string HighlightLine(string line, string lang)
@@ -428,13 +425,13 @@ class TerminalRenderer(int width, ColorScheme cs)
         var result = line;
         if (keywordRegex != null)
         {
-            result = keywordRegex.Replace(result, m => $"\x1b[{_cs.Keyword}m{m.Value}\x1b[0m");
+            result = keywordRegex.Replace(result, m => $"\x1b[{cs.Keyword}m{m.Value}\x1b[0m");
         }
 
         // String literals and comments are applied after and take visual priority —
         // their spans re-colour anything (including keyword highlights) they contain.
-        result = StringRegex.Replace(result,  m => $"\x1b[{_cs.String}m{m.Value}\x1b[0m");
-        result = CommentRegex.Replace(result, m => $"\x1b[{_cs.Comment}m{m.Value}\x1b[0m");
+        result = StringRegex.Replace(result,  m => $"\x1b[{cs.String}m{m.Value}\x1b[0m");
+        result = CommentRegex.Replace(result, m => $"\x1b[{cs.Comment}m{m.Value}\x1b[0m");
         return result;
     }
 
@@ -464,15 +461,15 @@ class TerminalRenderer(int width, ColorScheme cs)
                 case EmphasisInline em:
                     var inner = RenderInlines(em);
                     sb.Append(em.DelimiterCount == 2
-                        ? $"\x1b[{_cs.Bold}m{inner}\x1b[22m"
+                        ? $"\x1b[{cs.Bold}m{inner}\x1b[22m"
                         : $"\x1b[3m{inner}\x1b[23m");
                     break;
                 case CodeInline code:
-                    sb.Append($"\x1b[{_cs.InlineCode}m{code.Content}\x1b[0m");
+                    sb.Append($"\x1b[{cs.InlineCode}m{code.Content}\x1b[0m");
                     break;
                 case LinkInline link:
                     var linkText = RenderInlines(link);
-                    sb.Append($"\x1b[{_cs.Link};4m{linkText}\x1b[0m \x1b[{_cs.Comment}m({link.Url})\x1b[0m");
+                    sb.Append($"\x1b[{cs.Link};4m{linkText}\x1b[0m \x1b[{cs.Comment}m({link.Url})\x1b[0m");
                     break;
                 case LineBreakInline:
                     sb.Append('\n');
