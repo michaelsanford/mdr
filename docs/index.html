@@ -235,6 +235,15 @@
         .terminal-body .quote-bar { color: #565f89; }
         .terminal-body .quote-text { font-style: italic; color: var(--muted); }
 
+        /* File picker */
+        .terminal-body .picker-title { color: var(--yellow); font-weight: bold; }
+        .terminal-body .picker-path { color: var(--muted); }
+        .terminal-body .picker-dir { color: var(--accent); }
+        .terminal-body .picker-md { color: var(--green); }
+        .terminal-body .picker-cancel { color: #ff5f57; }
+        .terminal-body .picker-hint { color: #565f89; }
+        .terminal-body .picker-selected { color: var(--cyan); font-weight: bold; }
+
         .terminal-status {
             background: #e6edf3;
             color: #1a1b26;
@@ -454,6 +463,42 @@
         <div id="latest-version" style="margin-top:12px;font-size:0.85rem;color:var(--muted);"></div>
     </section>
 
+    <!-- Screenshot 0: Interactive file picker -->
+    <div class="terminal">
+        <div class="terminal-bar windows">
+            <div class="wt-tabs">
+                <div class="wt-tab"><span class="tab-icon">⌨</span> PowerShell</div>
+            </div>
+            <div class="wt-controls">
+                <span>─</span>
+                <span>□</span>
+                <span>✕</span>
+            </div>
+        </div>
+        <div class="terminal-body">
+<pre><span class="comment"># Open a file directly</span>
+<span style="color: var(--cyan);">❯</span> <span class="kw">mdr</span> README.md
+
+<span class="comment"># Or run with no arguments to browse and pick one</span>
+<span style="color: var(--cyan);">❯</span> <span class="kw">mdr</span>
+
+<span class="picker-title">Select a file to open</span>
+<span class="picker-path">Current: ~/projects/mdr</span>
+  📁 .. <span class="picker-path">(Parent Directory)</span>
+  📁 <span class="picker-dir">.github/</span>
+  📁 <span class="picker-dir">docs/</span>
+<span class="picker-selected">&gt; 📄 README.md</span>
+  📄 <span class="picker-md">CHANGELOG.md</span>
+  📄 Program.cs
+  📄 LICENSE
+  ❌ <span class="picker-cancel">Cancel</span>
+<span class="picker-hint">(Move up and down to reveal more options)</span></pre>
+        </div>
+        <div class="terminal-keys">
+            &nbsp;<kbd>↑↓</kbd> move &nbsp;<kbd>Enter</kbd> open / enter directory &nbsp;<kbd>Esc</kbd> / <kbd>Cancel</kbd> quit
+        </div>
+    </div>
+
     <!-- Screenshot 1: Windows Terminal -->
     <div class="terminal">
         <div class="terminal-bar windows">
@@ -576,6 +621,10 @@ Download the latest release from <span class="link">GitHub</span> <span class="u
             <div class="feature-card">
                 <h3>Interactive Pager</h3>
                 <p>Scroll through long documents with vim-style keybindings. Short output prints directly.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Interactive File Picker</h3>
+                <p>Run <span style="color: var(--accent);">mdr</span> with no file to browse the current directory, step in and out of folders, and pick a file to open — Markdown files are highlighted.</p>
             </div>
             <div class="feature-card">
                 <h3>Color Schemes</h3>
