@@ -25,7 +25,8 @@ var schemes = new ColorScheme[]
 var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
 string markdown;
-string fileName = "stdin";
+string fileName;
+
 if (args.Length > 0 && args[0] != "-")
 {
     if (!File.Exists(args[0]))
@@ -33,18 +34,23 @@ if (args.Length > 0 && args[0] != "-")
         AnsiConsole.MarkupLine($"[red]File not found:[/] {args[0]}");
         return 1;
     }
-    try
+    fileName = args[0];
+}
+else if (args.Length == 0 && !Console.IsInputRedirected)
+{
+    var selectedFile = ShowFilePicker();
+    if (selectedFile == null)
     {
-        markdown = File.ReadAllText(args[0]);
+        return 0;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-    {
-        AnsiConsole.MarkupLine($"[red]Error reading file:[/] {ex.Message}");
-        return 1;
-    }
-    fileName = Path.GetFileName(args[0]);
+    fileName = selectedFile;
 }
 else
+{
+    fileName = "stdin";
+}
+
+if (fileName == "stdin")
 {
     try
     {
@@ -56,6 +62,19 @@ else
         AnsiConsole.MarkupLine($"[red]Error reading stdin:[/] {ex.Message}");
         return 1;
     }
+}
+else
+{
+    try
+    {
+        markdown = File.ReadAllText(fileName);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        AnsiConsole.MarkupLine($"[red]Error reading file:[/] {ex.Message}");
+        return 1;
+    }
+    fileName = Path.GetFileName(fileName);
 }
 
 var width = AnsiConsole.Console.Profile.Width;
@@ -206,6 +225,77 @@ static void DrawPage(List<string> lines, int offset, int pageHeight, string file
         keySb.Append($"\x1b[97;48;5;238m {keys[k]} \x1b[0m\x1b[90m {labels[k]}  \x1b[0m");
     Console.Write(keySb.ToString());
     Console.Write("\x1b[K");
+}
+
+static string? ShowFilePicker()
+{
+    var currentDir = Directory.GetCurrentDirectory();
+    while (true)
+    {
+        var items = new List<FilePickerItem>();
+        
+        var parent = Directory.GetParent(currentDir);
+        if (parent != null)
+        {
+            items.Add(new FilePickerItem(parent.FullName, "📁 .. [grey](Parent Directory)[/]", true));
+        }
+
+        try
+        {
+            foreach (var dir in Directory.GetDirectories(currentDir))
+            {
+                var name = Path.GetFileName(dir);
+                items.Add(new FilePickerItem(dir, $"📁 [blue]{name}/[/]", true));
+            }
+
+            foreach (var file in Directory.GetFiles(currentDir))
+            {
+                var name = Path.GetFileName(file);
+                var isMarkdown = name.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+                var fileText = isMarkdown ? $"📄 [green]{name}[/]" : $"📄 {name}";
+                items.Add(new FilePickerItem(file, fileText, false));
+            }
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Error reading directory:[/] {ex.Message}");
+            if (parent != null)
+            {
+                currentDir = parent.FullName;
+                continue;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        items.Add(new FilePickerItem("", "❌ [red]Cancel[/]", false));
+
+        Console.Clear();
+        var prompt = new SelectionPrompt<FilePickerItem>()
+            .Title($"[bold yellow]Select a file to open[/]\n[grey]Current: {currentDir}[/]")
+            .PageSize(15)
+            .MoreChoicesText("[grey](Move up and down to reveal more options)[/]")
+            .AddChoices(items)
+            .UseConverter(item => item.DisplayText);
+
+        var selected = AnsiConsole.Prompt(prompt);
+
+        if (selected.Path == "")
+        {
+            return null;
+        }
+
+        if (selected.IsDirectory)
+        {
+            currentDir = selected.Path;
+        }
+        else
+        {
+            return selected.Path;
+        }
+    }
 }
 
 // --- Renderer ---
@@ -531,3 +621,5 @@ class TerminalRenderer(int width, ColorScheme cs)
 
 record ColorScheme(string Name, string Heading1, string Heading2, string Heading3, string Heading4,
     string Keyword, string String, string Comment, string Link, string InlineCode, string Border, string Bold);
+
+record FilePickerItem(string Path, string DisplayText, bool IsDirectory);
