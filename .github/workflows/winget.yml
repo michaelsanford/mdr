@@ -18,3 +18,79 @@ jobs:
           identifier: michaelsanford.mdr
           installers-regex: '\.exe$'
           token: ${{ secrets.WINGET_TOKEN }}
+
+  track:
+    needs: winget
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'   # tag_name only exists on release events
+    permissions:
+      issues: write
+    steps:
+      - name: Create tracking issue for winget PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+
+          # --- Find the upstream winget PR (it can take a moment to register) ---
+          QUERY="repo:microsoft/winget-pkgs in:title michaelsanford.mdr version ${VERSION}"
+          PR_URL=""
+          for i in $(seq 1 10); do
+            PR_URL=$(gh api -X GET search/issues \
+              -f q="${QUERY} type:pr" \
+              --jq '.items[0].html_url // empty')
+            [ -n "$PR_URL" ] && break
+            echo "PR not found yet (attempt $i), retrying in 30s..."
+            sleep 30
+          done
+
+          # --- Determine release contributors (authors + co-authors) ---
+          PREV=$(gh api "repos/${REPO}/releases?per_page=20" \
+            --jq "[.[] | select(.draft==false) | .tag_name] | .[1] // empty")
+
+          AUTHORS=""
+          COAUTHORS=""
+          if [ -n "$PREV" ]; then
+            COMPARE=$(gh api "repos/${REPO}/compare/${PREV}...${TAG}")
+            AUTHORS=$(echo "$COMPARE" | jq -r \
+              '[.commits[].author.login] | map(select(. != null and (endswith("[bot]") | not))) | unique | .[]')
+            # Co-authored-by trailers: extract login from GitHub noreply emails only
+            COAUTHORS=$(echo "$COMPARE" | jq -r '.commits[].commit.message' \
+              | grep -iE '^Co-authored-by:' \
+              | grep -ioE '([0-9]+\+)?[A-Za-z0-9._-]+@users\.noreply\.github\.com' \
+              | sed -E 's/@users\.noreply\.github\.com//I; s/^[0-9]+\+//' || true)
+          fi
+
+          # Always include the maintainer, dedupe, format as @mentions
+          MENTIONS=$(printf '%s\n%s\nmichaelsanford\n' "$AUTHORS" "$COAUTHORS" \
+            | sed '/^$/d' | sort -u | sed 's/^/@/' | paste -sd ' ' -)
+
+          # --- Compose body ---
+          if [ -z "$PR_URL" ]; then
+            LINK_LINE="Upstream PR could not be located automatically — check https://github.com/microsoft/winget-pkgs/pulls?q=michaelsanford.mdr"
+          else
+            LINK_LINE="Upstream PR: ${PR_URL}"
+          fi
+
+          BODY=$(printf '%s\n' \
+            "Tracking upstream approval of the winget manifest update." \
+            "" \
+            "- Release: ${TAG}" \
+            "- ${LINK_LINE}" \
+            "" \
+            "Contributors to this release: ${MENTIONS}" \
+            "" \
+            "This issue will close automatically once the upstream PR is merged.")
+
+          # Ensure the label exists, then open the tracker
+          gh label create winget --repo "$REPO" \
+            --color FFA500 --description "winget release tracking" 2>/dev/null || true
+
+          gh issue create \
+            --repo "$REPO" \
+            --title "Await Microsoft approval for Winget update ${TAG}" \
+            --body "$BODY" \
+            --label winget

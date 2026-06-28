@@ -1,0 +1,67 @@
+name: Close winget trackers
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve and close merged winget trackers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          gh issue list --repo "$REPO" --label winget --state open \
+            --json number,title,body --jq '.[] | @base64' | while read -r row; do
+            _jq() { echo "$row" | base64 -d | jq -r "$1"; }
+            NUM=$(_jq '.number')
+            TITLE=$(_jq '.title')
+            BODY=$(_jq '.body')
+
+            # Contributor mentions were recorded in the body when the tracker was opened
+            MENTIONS=$(echo "$BODY" \
+              | grep -ioE 'Contributors to this release:.*' \
+              | sed -E 's/.*release:[[:space:]]*//I' || true)
+            [ -z "$MENTIONS" ] && MENTIONS="@michaelsanford"
+
+            # Prefer the PR number recorded in the body; otherwise re-search by version
+            PR_NUM=$(echo "$BODY" | grep -ioE 'winget-pkgs/pull/[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+            if [ -z "$PR_NUM" ]; then
+              TAG=$(echo "$TITLE" | grep -oE 'v?[0-9][0-9A-Za-z.+-]*$' || true)
+              VERSION="${TAG#v}"
+              if [ -n "$VERSION" ]; then
+                PR_NUM=$(gh api -X GET search/issues \
+                  -f q="repo:microsoft/winget-pkgs in:title michaelsanford.mdr version ${VERSION} type:pr" \
+                  --jq '.items[0].html_url // empty' | grep -oE '[0-9]+$' || true)
+              fi
+            fi
+
+            if [ -z "$PR_NUM" ]; then
+              echo "Issue #$NUM: no upstream PR located yet, leaving open."
+              continue
+            fi
+
+            INFO=$(gh api "repos/microsoft/winget-pkgs/pulls/${PR_NUM}")
+            MERGED=$(echo "$INFO" | jq -r '.merged')
+            STATE=$(echo "$INFO" | jq -r '.state')
+
+            if [ "$MERGED" = "true" ]; then
+              gh issue close "$NUM" --repo "$REPO" --reason completed \
+                --comment "🎉 Merged upstream in microsoft/winget-pkgs#${PR_NUM}. Thanks ${MENTIONS}! Closing this tracker."
+              echo "Issue #$NUM: closed (PR #$PR_NUM merged)."
+            elif [ "$STATE" = "closed" ]; then
+              gh issue close "$NUM" --repo "$REPO" --reason "not planned" \
+                --comment "⚠️ Upstream PR microsoft/winget-pkgs#${PR_NUM} was closed without merging. cc ${MENTIONS} — please verify. Closing this tracker."
+              echo "Issue #$NUM: closed (PR #$PR_NUM closed without merge)."
+            else
+              echo "Issue #$NUM: PR #$PR_NUM still open, leaving tracker open."
+            fi
+          done
