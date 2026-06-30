@@ -38,6 +38,19 @@ if (args.Length > 0 && args[0] != "-")
 }
 else if (args.Length == 0 && !Console.IsInputRedirected)
 {
+    if (!AnsiConsole.Console.Profile.Capabilities.Interactive)
+    {
+        AnsiConsole.MarkupLine("[bold]mdr[/] - Markdown Renderer for the Terminal");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Usage:[/]");
+        AnsiConsole.MarkupLine("  mdr <file-path>    Render a markdown file");
+        AnsiConsole.MarkupLine("  mdr -              Render markdown from stdin");
+        AnsiConsole.MarkupLine("  some-command | mdr Render output piped from another command");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("Run in an interactive terminal to use the interactive file picker.");
+        return 0;
+    }
+
     var selectedFile = ShowFilePicker();
     if (selectedFile == null)
     {
@@ -85,7 +98,7 @@ var renderer = new TerminalRenderer(width, schemes[schemeIndex]);
 var lines = renderer.RenderToLines(doc);
 
 // Non-interactive: dump and exit
-if (!AnsiConsole.Console.Profile.Capabilities.Interactive || lines.Count <= Console.WindowHeight - 2)
+if (!AnsiConsole.Console.Profile.Capabilities.Interactive || lines.Count <= GetConsoleWindowHeight() - 2)
 {
     foreach (var line in lines)
         Console.WriteLine(line);
@@ -93,32 +106,32 @@ if (!AnsiConsole.Console.Profile.Capabilities.Interactive || lines.Count <= Cons
 }
 
 // --- Interactive pager ---
-var pageHeight = Console.WindowHeight - 2;
+var pageHeight = GetConsoleWindowHeight() - 2;
 int offset = 0;
 int maxOffset = Math.Max(0, lines.Count - pageHeight);
 
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
-    Console.Clear();
+    SafeClearConsole();
     Console.CursorVisible = true;
     Environment.Exit(0);
 };
 
 Console.CursorVisible = false;
-Console.Clear();
+SafeClearConsole();
 DrawPage(lines, offset, pageHeight, fileName, width, schemes[schemeIndex]);
 
-int lastWidth = Console.WindowWidth;
-int lastHeight = Console.WindowHeight;
+int lastWidth = GetConsoleWindowWidth();
+int lastHeight = GetConsoleWindowHeight();
 
 while (true)
 {
     while (!Console.KeyAvailable)
     {
         Thread.Sleep(50);
-        int currentWidth = Console.WindowWidth;
-        int currentHeight = Console.WindowHeight;
+        int currentWidth = GetConsoleWindowWidth();
+        int currentHeight = GetConsoleWindowHeight();
         if (currentWidth != lastWidth || currentHeight != lastHeight)
         {
             lastWidth = currentWidth;
@@ -129,7 +142,7 @@ while (true)
             lines = renderer.RenderToLines(doc);
             maxOffset = Math.Max(0, lines.Count - pageHeight);
             offset = Math.Min(offset, maxOffset);
-            Console.Clear();
+            SafeClearConsole();
             DrawPage(lines, offset, pageHeight, fileName, width, schemes[schemeIndex]);
         }
     }
@@ -174,13 +187,13 @@ while (true)
             break;
         case ConsoleKey.Q:
         case ConsoleKey.Escape:
-            Console.Clear();
+            SafeClearConsole();
             Console.CursorVisible = true;
             return 0;
     }
 
-    int w = Console.WindowWidth;
-    int h = Console.WindowHeight;
+    int w = GetConsoleWindowWidth();
+    int h = GetConsoleWindowHeight();
     if (w != lastWidth || h != lastHeight)
     {
         lastWidth = w;
@@ -191,7 +204,7 @@ while (true)
         lines = renderer.RenderToLines(doc);
         maxOffset = Math.Max(0, lines.Count - pageHeight);
         offset = Math.Min(offset, maxOffset);
-        Console.Clear();
+        SafeClearConsole();
         redraw = true;
     }
 
@@ -272,7 +285,7 @@ static string? ShowFilePicker()
 
         items.Add(new FilePickerItem("", "❌ [red]Cancel[/]", false));
 
-        Console.Clear();
+        SafeClearConsole();
         var prompt = new SelectionPrompt<FilePickerItem>()
             .Title($"[bold yellow]Select a file to open[/]\n[grey]Current: {currentDir}[/]")
             .PageSize(15)
@@ -295,6 +308,43 @@ static string? ShowFilePicker()
         {
             return selected.Path;
         }
+    }
+}
+
+static void SafeClearConsole()
+{
+    try
+    {
+        Console.Clear();
+    }
+    catch (IOException)
+    {
+        // Fallback: Use standard ANSI escape sequences to clear screen and home cursor
+        Console.Write("\x1b[2J\x1b[H");
+    }
+}
+
+static int GetConsoleWindowWidth(int fallback = 80)
+{
+    try
+    {
+        return Console.WindowWidth;
+    }
+    catch (IOException)
+    {
+        return fallback;
+    }
+}
+
+static int GetConsoleWindowHeight(int fallback = 24)
+{
+    try
+    {
+        return Console.WindowHeight;
+    }
+    catch (IOException)
+    {
+        return fallback;
     }
 }
 
