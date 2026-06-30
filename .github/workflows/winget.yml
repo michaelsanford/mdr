@@ -75,20 +75,20 @@ jobs:
 
           # --- Compose body ---
           if [ -z "$PR_URL" ]; then
-            LINK_LINE="Upstream PR could not be located automatically — check https://github.com/microsoft/winget-pkgs/pulls?q=michaelsanford.mdr"
+            LINK_LINE="Downstream PR could not be located automatically — check https://github.com/microsoft/winget-pkgs/pulls?q=michaelsanford.mdr"
           else
-            LINK_LINE="Upstream PR: ${PR_URL}"
+            LINK_LINE="Downstream PR: ${PR_URL}"
           fi
 
           BODY=$(printf '%s\n' \
-            "Tracking upstream approval of the winget manifest update." \
+            "Tracking downstream approval of the winget manifest update." \
             "" \
             "- Release: ${TAG}" \
             "- ${LINK_LINE}" \
             "" \
             "Contributors to this release: ${MENTIONS}" \
             "" \
-            "This issue will close automatically once the upstream PR is merged.")
+            "This issue will close automatically once the downstream PR is merged.")
 
           # Ensure the label exists, then open the tracker
           gh label create winget --repo "$REPO" \

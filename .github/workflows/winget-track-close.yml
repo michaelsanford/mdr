@@ -52,7 +52,7 @@ jobs:
             fi
 
             if [ -z "$PR_NUM" ]; then
-              echo "Issue #$NUM: no upstream PR located yet, leaving open."
+              echo "Issue #$NUM: no downstream PR located yet, leaving open."
               continue
             fi
 
@@ -62,11 +62,11 @@ jobs:
 
             if [ "$MERGED" = "true" ]; then
               gh issue close "$NUM" --repo "$REPO" --reason completed \
-                --comment "🎉 Merged upstream in microsoft/winget-pkgs#${PR_NUM}. Thanks ${MENTIONS}! Closing this tracker."
+                --comment "🎉 Merged downstream in microsoft/winget-pkgs#${PR_NUM}. Thanks ${MENTIONS}! Closing this tracker."
               echo "Issue #$NUM: closed (PR #$PR_NUM merged)."
             elif [ "$STATE" = "closed" ]; then
               gh issue close "$NUM" --repo "$REPO" --reason "not planned" \
-                --comment "⚠️ Upstream PR microsoft/winget-pkgs#${PR_NUM} was closed without merging. cc ${MENTIONS} — please verify. Closing this tracker."
+                --comment "⚠️ Downstream PR microsoft/winget-pkgs#${PR_NUM} was closed without merging. cc ${MENTIONS} — please verify. Closing this tracker."
               echo "Issue #$NUM: closed (PR #$PR_NUM closed without merge)."
             else
               echo "Issue #$NUM: PR #$PR_NUM still open, leaving tracker open."
