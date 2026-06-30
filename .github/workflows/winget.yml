@@ -35,13 +35,18 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#v}"
 
-          # --- Find the upstream winget PR (it can take a moment to register) ---
-          QUERY="repo:microsoft/winget-pkgs in:title michaelsanford.mdr version ${VERSION}"
           PR_URL=""
           for i in $(seq 1 10); do
-            PR_URL=$(gh api -X GET search/issues \
-              -f q="${QUERY} type:pr" \
-              --jq '.items[0].html_url // empty')
+            # Try real-time pulls endpoint first (most robust & instant)
+            PR_URL=$(gh api -X GET repos/microsoft/winget-pkgs/pulls -f per_page=100 \
+              --jq "[.[] | select(.title | contains(\"michaelsanford.mdr version ${VERSION}\"))][0].html_url // empty")
+
+            # Fall back to search API if not found on page 1 of pulls
+            if [ -z "$PR_URL" ]; then
+              QUERY="repo:microsoft/winget-pkgs in:title michaelsanford.mdr version ${VERSION}"
+              PR_URL=$(gh api -X GET search/issues -f q="${QUERY} type:pr" --jq '.items[0].html_url // empty')
+            fi
+
             [ -n "$PR_URL" ] && break
             echo "PR not found yet (attempt $i), retrying in 30s..."
             sleep 30

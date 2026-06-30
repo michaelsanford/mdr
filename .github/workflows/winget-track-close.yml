@@ -38,9 +38,16 @@ jobs:
               TAG=$(echo "$TITLE" | grep -oE 'v?[0-9][0-9A-Za-z.+-]*$' || true)
               VERSION="${TAG#v}"
               if [ -n "$VERSION" ]; then
-                PR_NUM=$(gh api -X GET search/issues \
-                  -f q="repo:microsoft/winget-pkgs in:title michaelsanford.mdr version ${VERSION} type:pr" \
-                  --jq '.items[0].html_url // empty' | grep -oE '[0-9]+$' || true)
+                # Try real-time pulls endpoint first (most robust)
+                PR_NUM=$(gh api -X GET repos/microsoft/winget-pkgs/pulls -f per_page=100 \
+                  --jq "[.[] | select(.title | contains(\"michaelsanford.mdr version ${VERSION}\"))][0].number // empty" 2>/dev/null || true)
+
+                # Fall back to search API
+                if [ -z "$PR_NUM" ]; then
+                  PR_NUM=$(gh api -X GET search/issues \
+                    -f q="repo:microsoft/winget-pkgs in:title michaelsanford.mdr version ${VERSION} type:pr" \
+                    --jq '.items[0].html_url // empty' | grep -oE '[0-9]+$' || true)
+                fi
               fi
             fi
 
