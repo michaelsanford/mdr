@@ -4,13 +4,13 @@ Each release of mdr is named after a French comedian — because *mdr* is French
 
 | Version | Codename | Known for |
 |---------|----------|-----------|
-| A | **Arletty** | Hôtel du Nord, Les Enfants du Paradis |
-| B | **Bourvil** | La Grande Vadrouille, Le Corniaud |
-| C | **Coluche** | Les Restos du Cœur, legendary stand-up |
-| D | **Desproges** | Razor-sharp absurdist monologues |
-| E | **Elmaleh** (Gad) | Chouchou, one-man shows |
-| F | **Fernandel** | Don Camillo series |
-| G | **Guimond** (Olivier) | Burlesque pioneer |
+| 1.0.0 | **Arletty** | Hôtel du Nord, Les Enfants du Paradis |
+| 1.2.0 | **Bourvil** | La Grande Vadrouille, Le Corniaud |
+| 1.4.0 | **Coluche** | Les Restos du Cœur, legendary stand-up |
+| 1.6.0 | **Desproges** | Razor-sharp absurdist monologues |
+| 1.8.0 | **Elmaleh** (Gad) | Chouchou, one-man shows |
+| 1.10.0 | **Fernandel** | Don Camillo series |
+| 1.12.0 | **Guimond** (Olivier) | Burlesque pioneer |
 | H | **Huster** (Francis) | Comedic theatre |
 | I | **Issa Doumbia** | Modern stand-up/TV |
 | J | **Jamel** (Debbouze) | Astérix, Amélie, Marrakech du Rire |
