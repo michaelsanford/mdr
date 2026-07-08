@@ -5,6 +5,8 @@ using Spectre.Console;
 using System.Text;
 using System.Text.RegularExpressions;
 
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 var schemes = new ColorScheme[]
 {
     new("Monokai",    "38;5;228;1", "38;5;81;1", "38;5;166;1", "38;5;141;1",
