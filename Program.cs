@@ -5,7 +5,7 @@ using Spectre.Console;
 using System.Text;
 using System.Text.RegularExpressions;
 
-Console.OutputEncoding = System.Text.Encoding.UTF8;
+Console.OutputEncoding = Encoding.UTF8;
 
 var schemes = new ColorScheme[]
 {
