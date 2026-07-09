@@ -23,28 +23,50 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Explicit name keeps the check context as "build (<rid>)" so it matches the
+    # branch ruleset's required status checks even though the matrix now carries
+    # extra dimensions (os, musl).
+    name: build (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        rid: [win-x64, win-arm64, linux-x64, linux-arm64, linux-musl-x64, linux-musl-arm64, osx-x64, osx-arm64]
+        # NativeAOT cannot cross-compile across operating systems: each RID builds
+        # on a runner of its own OS. Mirrors the release workflow matrix.
+        include:
+          - { rid: win-x64,          os: windows-latest }
+          - { rid: win-arm64,        os: windows-11-arm }
+          - { rid: linux-x64,        os: ubuntu-latest }
+          - { rid: linux-arm64,      os: ubuntu-24.04-arm }
+          - { rid: linux-musl-x64,   os: ubuntu-latest,     musl: true }
+          - { rid: linux-musl-arm64, os: ubuntu-24.04-arm,  musl: true }
+          - { rid: osx-x64,          os: macos-latest }
+          - { rid: osx-arm64,        os: macos-latest }
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        if: ${{ !matrix.musl }}
         with:
           dotnet-version: '10.x'
 
-      - name: Restore (${{ matrix.rid }})
-        run: dotnet restore mdr.csproj --runtime ${{ matrix.rid }}
+      - name: Install AOT prerequisites (Linux)
+        if: ${{ startsWith(matrix.os, 'ubuntu') && !matrix.musl }}
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+      - name: Publish native AOT binary
+        if: ${{ !matrix.musl }}
+        run: dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish
 
-      - name: Publish (${{ matrix.rid }})
+      - name: Publish native AOT binary (musl, Alpine container)
+        if: ${{ matrix.musl }}
         run: |
-          dotnet publish mdr.csproj \
-            --configuration Release \
-            --runtime ${{ matrix.rid }} \
-            --self-contained \
-            --no-restore
+          docker run --rm -v "$PWD":/src -w /src \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine \
+            sh -c "apk add --no-cache clang build-base zlib-dev zlib-static && \
+                   dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish"
