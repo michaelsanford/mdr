@@ -69,6 +69,42 @@ jobs:
                 --comment "⚠️ Downstream PR microsoft/winget-pkgs#${PR_NUM} was closed without merging. cc ${MENTIONS} — please verify. Closing this tracker."
               echo "Issue #$NUM: closed (PR #$PR_NUM closed without merge)."
             else
-              echo "Issue #$NUM: PR #$PR_NUM still open, leaving tracker open."
+              echo "Issue #$NUM: PR #$PR_NUM still open, checking labels and comments..."
+              
+              # --- Fetch downstream PR labels (excluding New-Manifest) ---
+              LABELS=$(echo "$INFO" | jq -r '.labels[].name | select(. != "New-Manifest")' 2>/dev/null || true)
+              
+              # --- Fetch existing tracker issue comments to prevent duplicates ---
+              EXISTING_COMMENTS=$(gh issue view "$NUM" --repo "$REPO" --json comments --jq '.comments[].body' 2>/dev/null || true)
+              
+              # Report new labels
+              if [ -n "$LABELS" ]; then
+                echo "$LABELS" | while read -r label; do
+                  [ -z "$label" ] && continue
+                  if ! echo "$EXISTING_COMMENTS" | grep -Fq "Downstream PR label detected: $label"; then
+                    gh issue comment "$NUM" --repo "$REPO" --body "🏷️ **Downstream PR label detected:** \`$label\`"
+                    echo "Issue #$NUM: Reported new label $label."
+                  fi
+                done
+              fi
+
+              # --- Fetch downstream PR comments for validation failures ---
+              PR_COMMENTS=$(gh api "repos/microsoft/winget-pkgs/issues/${PR_NUM}/comments" 2>/dev/null || true)
+              if [ -n "$PR_COMMENTS" ] && [ "$PR_COMMENTS" != "[]" ]; then
+                echo "$PR_COMMENTS" | jq -c '.[]' | while read -r comment; do
+                  CID=$(echo "$comment" | jq -r '.id')
+                  C_BODY=$(echo "$comment" | jq -r '.body')
+                  
+                  # Scan for validation failure keywords
+                  if echo "$C_BODY" | grep -qiE "(Inconsistencies detected|Failed|Error|Reject|Missing|Validation Failed)"; then
+                    if ! echo "$EXISTING_COMMENTS" | grep -Fq "Downstream PR comment #$CID"; then
+                      gh issue comment "$NUM" --repo "$REPO" --body "⚠️ **Downstream validation reported an issue:** (Comment #$CID)
+                      
+                      $C_BODY"
+                      echo "Issue #$NUM: Forwarded downstream comment #$CID."
+                    fi
+                  fi
+                done
+              fi
             fi
           done
