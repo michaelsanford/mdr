@@ -27,11 +27,11 @@ jobs:
           - rid: win-x64
             os: windows-latest
             artifact: mdr.exe
-            suffix: win-x64.exe
+            suffix: win-x64.zip
           - rid: win-arm64
             os: windows-11-arm
             artifact: mdr.exe
-            suffix: win-arm64.exe
+            suffix: win-arm64.zip
           - rid: linux-x64
             os: ubuntu-latest
             artifact: mdr
@@ -87,8 +87,14 @@ jobs:
             sh -c "apk add --no-cache clang build-base zlib-dev zlib-static && \
                    dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish"
 
-      - name: Rename artifact
-        run: cp "publish/${{ matrix.artifact }}" "publish/mdr-${{ github.ref_name }}-${{ matrix.suffix }}"
+      - name: Rename and package artifact
+        run: |
+          if [[ "${{ matrix.suffix }}" == *.zip ]]; then
+            cd publish
+            7z a "mdr-${{ github.ref_name }}-${{ matrix.suffix }}" "${{ matrix.artifact }}"
+          else
+            cp "publish/${{ matrix.artifact }}" "publish/mdr-${{ github.ref_name }}-${{ matrix.suffix }}"
+          fi
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1

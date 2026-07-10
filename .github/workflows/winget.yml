@@ -16,7 +16,7 @@ jobs:
         uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         with:
           identifier: michaelsanford.mdr
-          installers-regex: '\.exe$'
+          installers-regex: '\.zip$'
           token: ${{ secrets.WINGET_TOKEN }}
 
   track:
