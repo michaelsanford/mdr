@@ -447,7 +447,7 @@
         <h1><span>mdr</span></h1>
         <p>A beautiful, cross-platform terminal markdown renderer. Read docs, READMEs, and notes without leaving your shell.</p>
         <div class="badges">
-            <span class="badge">.NET 9</span>
+            <span class="badge">.NET 10</span>
             <span class="badge">Windows</span>
             <span class="badge">macOS</span>
             <span class="badge">Linux</span>
@@ -650,18 +650,19 @@ Download the latest release from <span class="link">GitHub</span> <span class="u
         <div class="tab-content" id="tab-windows">
             <div class="install-code">
 <pre># Download (x64 or ARM64)
-iwr "https://github.com/michaelsanford/mdr/releases/latest/download/mdr-vX.Y.Z-win-x64.exe" -Out mdr.exe
+iwr "https://github.com/michaelsanford/mdr/releases/latest/download/mdr-vX.Y.Z-win-x64.zip" -Out mdr.zip
 
 # Verify attestation
-gh attestation verify mdr.exe --owner michaelsanford
+gh attestation verify mdr.zip --owner michaelsanford
 
 # Verify signature
-cosign verify-blob mdr.exe `
-  --bundle mdr-vX.Y.Z-win-x64.exe.bundle `
+cosign verify-blob mdr.zip `
+  --bundle mdr-vX.Y.Z-win-x64.zip.bundle `
   --certificate-identity-regexp "github.com/michaelsanford/mdr" `
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
-# Run
+# Extract and run
+Expand-Archive mdr.zip -DestinationPath . -Force
 .\mdr.exe README.md</pre>
             </div>
         </div>
