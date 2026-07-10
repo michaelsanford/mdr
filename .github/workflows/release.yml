@@ -10,61 +10,91 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: build (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
       id-token: write
       attestations: write
 
     strategy:
+      fail-fast: false
       matrix:
+        # NativeAOT cannot cross-compile across operating systems, so each RID
+        # builds on a runner of its own OS (and native arch where possible).
+        # musl targets build inside an Alpine container via docker (see below).
         include:
           - rid: win-x64
+            os: windows-latest
             artifact: mdr.exe
-            suffix: win-x64.exe
+            suffix: win-x64.zip
           - rid: win-arm64
+            os: windows-11-arm
             artifact: mdr.exe
-            suffix: win-arm64.exe
+            suffix: win-arm64.zip
           - rid: linux-x64
+            os: ubuntu-latest
             artifact: mdr
             suffix: linux-x64
           - rid: linux-arm64
+            os: ubuntu-24.04-arm
             artifact: mdr
             suffix: linux-arm64
           - rid: linux-musl-x64
+            os: ubuntu-latest
+            musl: true
             artifact: mdr
             suffix: linux-musl-x64
           - rid: linux-musl-arm64
+            os: ubuntu-24.04-arm
+            musl: true
             artifact: mdr
             suffix: linux-musl-arm64
           - rid: osx-x64
+            os: macos-latest
             artifact: mdr
             suffix: osx-x64
           - rid: osx-arm64
+            os: macos-latest
             artifact: mdr
             suffix: osx-arm64
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        if: ${{ !matrix.musl }}
         with:
           dotnet-version: '10.x'
 
-      - name: Restore (${{ matrix.rid }})
-        run: dotnet restore mdr.csproj --runtime ${{ matrix.rid }}
+      - name: Install AOT prerequisites (Linux)
+        if: ${{ startsWith(matrix.os, 'ubuntu') && !matrix.musl }}
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
-      - name: Publish self-contained binary
+      - name: Publish native AOT binary
+        if: ${{ !matrix.musl }}
+        run: dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish
+
+      - name: Publish native AOT binary (musl, Alpine container)
+        if: ${{ matrix.musl }}
         run: |
-          dotnet publish mdr.csproj \
-            --no-restore \
-            --configuration Release \
-            --runtime ${{ matrix.rid }} \
-            --self-contained \
-            --output publish/
+          docker run --rm -v "$PWD":/src -w /src \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine \
+            sh -c "apk add --no-cache clang build-base zlib-dev zlib-static && \
+                   dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish"
 
-      - name: Rename artifact
-        run: cp "publish/${{ matrix.artifact }}" "publish/mdr-${{ github.ref_name }}-${{ matrix.suffix }}"
+      - name: Rename and package artifact
+        run: |
+          if [[ "${{ matrix.suffix }}" == *.zip ]]; then
+            cd publish
+            7z a "mdr-${{ github.ref_name }}-${{ matrix.suffix }}" "${{ matrix.artifact }}"
+          else
+            cp "publish/${{ matrix.artifact }}" "publish/mdr-${{ github.ref_name }}-${{ matrix.suffix }}"
+          fi
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1

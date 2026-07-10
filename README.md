@@ -3,7 +3,7 @@
 [![CI](https://github.com/michaelsanford/mdr/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelsanford/mdr/actions/workflows/ci.yml)
 [![Release](https://github.com/michaelsanford/mdr/actions/workflows/release.yml/badge.svg)](https://github.com/michaelsanford/mdr/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/github/license/michaelsanford/mdr)](LICENSE)
-![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)
+![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 [![Security](https://img.shields.io/badge/security-aikido-blueviolet?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDMgN3Y1YzAgNS41NSAzLjg0IDEwLjc0IDkgMTIgNS4xNi0xLjI2IDktNi40NSA5LTEyVjdMMTIgMnoiLz48L3N2Zz4=)](https://app.aikido.dev/)
 
 [![GitHub release](https://img.shields.io/github/v/release/michaelsanford/mdr)](https://github.com/michaelsanford/mdr/releases/latest)
@@ -14,7 +14,7 @@
 ![macOS](https://img.shields.io/badge/macOS-x64%20|%20ARM64-000000?logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-x64%20|%20ARM64-FCC624?logo=linux&logoColor=black)
 
-A cross-platform terminal-based markdown renderer for .NET 9.
+A cross-platform terminal-based markdown renderer for .NET 10.
 
 Renders markdown with full ANSI formatting — bold, italic, colors, syntax-highlighted code blocks, tables, and more — adapted to your terminal width. Includes an interactive pager with vim-style navigation and multiple color schemes.
 
@@ -42,18 +42,24 @@ winget install michaelsanford.mdr
 
 ### From source
 
-Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```powershell
 dotnet build -c Release
 ```
 
-Or publish a self-contained binary for your platform:
+Or publish a native binary for your platform. Releases are compiled with
+[NativeAOT](https://learn.microsoft.com/dotnet/core/deploying/native-aot/) — a
+self-contained native executable with no runtime dependency — so publishing
+requires the platform's C/C++ toolchain
+([prerequisites](https://learn.microsoft.com/dotnet/core/deploying/native-aot/#prerequisites)):
+the "Desktop development with C++" workload on Windows, `clang` + `zlib1g-dev`
+on Linux, and Xcode command line tools on macOS.
 
 ```powershell
-dotnet publish -c Release -r linux-x64 --self-contained
-dotnet publish -c Release -r osx-arm64 --self-contained
-dotnet publish -c Release -r win-x64 --self-contained
+dotnet publish -c Release -r linux-x64
+dotnet publish -c Release -r osx-arm64
+dotnet publish -c Release -r win-x64
 ```
 
 ## Usage
