@@ -29,6 +29,7 @@ jobs:
       - name: Create tracking issue for winget PR
         env:
           GH_TOKEN: ${{ github.token }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
           REPO: ${{ github.repository }}
         run: |
@@ -51,6 +52,16 @@ jobs:
             echo "PR not found yet (attempt $i), retrying in 30s..."
             sleep 30
           done
+
+          # Convert downstream PR to draft immediately
+          PR_NUM=""
+          if [ -n "$PR_URL" ]; then
+            PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$' || true)
+          fi
+          if [ -n "$PR_NUM" ]; then
+            echo "Converting downstream PR #$PR_NUM to Draft..."
+            GH_TOKEN="$WINGET_TOKEN" gh pr ready "$PR_NUM" --undo --repo microsoft/winget-pkgs || true
+          fi
 
           # --- Determine release contributors (authors + co-authors) ---
           PREV=$(gh api "repos/${REPO}/releases?per_page=20" \
