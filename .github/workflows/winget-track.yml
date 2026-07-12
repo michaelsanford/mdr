@@ -1,8 +1,8 @@
-name: Close winget trackers
+name: Winget track
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # every 6 hours
+    - cron: '0 * * * *'   # every 1 hour
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,7 @@ jobs:
       - name: Resolve and close merged winget trackers
         env:
           GH_TOKEN: ${{ github.token }}
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -49,6 +50,14 @@ jobs:
                     --jq '.items[0].html_url // empty' | grep -oE '[0-9]+$' || true)
                 fi
               fi
+
+              # Update issue body to include the PR link if found
+              if [ -n "$PR_NUM" ]; then
+                if echo "$BODY" | grep -qF "Downstream PR could not be located automatically"; then
+                  NEW_BODY=$(echo "$BODY" | sed "s|Downstream PR could not be located automatically — check https://github.com/microsoft/winget-pkgs/pulls?q=michaelsanford.mdr|Downstream PR: https://github.com/microsoft/winget-pkgs/pull/$PR_NUM|g")
+                  gh issue edit "$NUM" --body "$NEW_BODY" --repo "$REPO"
+                fi
+              fi
             fi
 
             if [ -z "$PR_NUM" ]; then
@@ -77,11 +86,27 @@ jobs:
               # --- Fetch existing tracker issue comments to prevent duplicates ---
               EXISTING_COMMENTS=$(gh issue view "$NUM" --repo "$REPO" --json comments --jq '.comments[].body' 2>/dev/null || true)
               
+              # Check draft status and mark ready if automated validation passed
+              DRAFT=$(echo "$INFO" | jq -r '.draft')
+              HAS_AZURE=$(echo "$LABELS" | grep -Fx "Azure-Pipeline-Passed" || true)
+              HAS_VALIDATION=$(echo "$LABELS" | grep -Fx "Validation-Completed" || true)
+
+              if [ "$DRAFT" = "true" ] && [ -n "$HAS_AZURE" ] && [ -n "$HAS_VALIDATION" ]; then
+                echo "Issue #$NUM: Both Azure-Pipeline-Passed and Validation-Completed labels are present. Marking PR #$PR_NUM as ready to review..."
+                if GH_TOKEN="$WINGET_TOKEN" gh pr ready "$PR_NUM" --repo microsoft/winget-pkgs; then
+                  gh issue comment "$NUM" --repo "$REPO" --body "🚀 **Downstream PR checks passed:** Marking microsoft/winget-pkgs#${PR_NUM} as Ready for Review."
+                  EXISTING_COMMENTS="$EXISTING_COMMENTS
+🚀 **Downstream PR checks passed:** Marking microsoft/winget-pkgs#${PR_NUM} as Ready for Review."
+                else
+                  echo "Failed to mark PR #$PR_NUM as ready."
+                fi
+              fi
+
               # Report new labels
               if [ -n "$LABELS" ]; then
                 echo "$LABELS" | while read -r label; do
                   [ -z "$label" ] && continue
-                  if ! echo "$EXISTING_COMMENTS" | grep -Fq "Downstream PR label detected: $label"; then
+                  if ! echo "$EXISTING_COMMENTS" | grep -F "Downstream PR label detected" | grep -Fq "$label"; then
                     gh issue comment "$NUM" --repo "$REPO" --body "🏷️ **Downstream PR label detected:** \`$label\`"
                     echo "Issue #$NUM: Reported new label $label."
                   fi
@@ -97,7 +122,7 @@ jobs:
                   
                   # Scan for validation failure keywords
                   if echo "$C_BODY" | grep -qiE "(Inconsistencies detected|Failed|Error|Reject|Missing|Validation Failed)"; then
-                    if ! echo "$EXISTING_COMMENTS" | grep -Fq "Downstream PR comment #$CID"; then
+                    if ! echo "$EXISTING_COMMENTS" | grep -Fq "Comment #$CID"; then
                       gh issue comment "$NUM" --repo "$REPO" --body "⚠️ **Downstream validation reported an issue:** (Comment #$CID)
                       
                       $C_BODY"
