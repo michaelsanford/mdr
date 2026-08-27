@@ -357,7 +357,21 @@ class TerminalRenderer(int width, ColorScheme cs)
     private static readonly Regex AnsiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
     private static readonly Regex StringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
     private static readonly Regex CommentRegex = new(@"(//.*|#\s.*)",    RegexOptions.Compiled);
-    private static readonly Dictionary<string, Regex?> KeywordRegexCache = new();
+    // Fence labels are whatever a document author typed, so they are mapped onto a
+    // closed set of canonical ids before use. That keeps the regex cache bounded --
+    // an arbitrary label can no longer add an entry -- and keeps every keyword
+    // pattern provably derived from the constant table in GetKeywords.
+    private static readonly Dictionary<string, string> CanonicalLanguages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["csharp"] = "csharp", ["cs"] = "csharp", ["c#"] = "csharp",
+        ["javascript"] = "javascript", ["js"] = "javascript",
+        ["typescript"] = "javascript", ["ts"] = "javascript",
+        ["python"] = "python", ["py"] = "python",
+        ["rust"] = "rust", ["rs"] = "rust",
+        ["go"] = "go",
+    };
+
+    private static readonly Dictionary<string, Regex> KeywordRegexCache = new(StringComparer.Ordinal);
 
     public List<string> RenderToLines(MarkdownDocument doc)
     {
@@ -544,25 +558,27 @@ class TerminalRenderer(int width, ColorScheme cs)
         output.Add($"\x1b[{b}m╰{new string('─', width - 2)}╯\x1b[0m");
     }
 
+    /// <summary>Keyword pattern for a fence label, or null when the language is unknown.</summary>
+    private static Regex? KeywordRegexFor(string lang)
+    {
+        if (!CanonicalLanguages.TryGetValue(lang, out var canonical)) return null;
+
+        if (!KeywordRegexCache.TryGetValue(canonical, out var keywordRegex))
+        {
+            var keywords = GetKeywords(canonical);
+            var pattern = $@"\b(?:{string.Join("|", keywords.Select(Regex.Escape))})\b";
+            keywordRegex = new Regex(pattern, RegexOptions.Compiled);
+            KeywordRegexCache[canonical] = keywordRegex;
+        }
+
+        return keywordRegex;
+    }
+
     private string HighlightLine(string line, string lang)
     {
         if (string.IsNullOrEmpty(lang)) return line;
         
-        var lowerLang = lang.ToLowerInvariant();
-        if (!KeywordRegexCache.TryGetValue(lowerLang, out var keywordRegex))
-        {
-            var keywords = GetKeywords(lowerLang);
-            if (keywords.Length > 0)
-            {
-                var pattern = $@"\b(?:{string.Join("|", keywords.Select(Regex.Escape))})\b";
-                keywordRegex = new Regex(pattern, RegexOptions.Compiled);
-            }
-            else
-            {
-                keywordRegex = null;
-            }
-            KeywordRegexCache[lowerLang] = keywordRegex;
-        }
+        var keywordRegex = KeywordRegexFor(lang);
 
         var result = line;
         if (keywordRegex != null)
