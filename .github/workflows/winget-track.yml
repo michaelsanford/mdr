@@ -94,9 +94,9 @@ jobs:
               if [ "$DRAFT" = "true" ] && [ -n "$HAS_AZURE" ] && [ -n "$HAS_VALIDATION" ]; then
                 echo "Issue #$NUM: Both Azure-Pipeline-Passed and Validation-Completed labels are present. Marking PR #$PR_NUM as ready to review..."
                 if GH_TOKEN="$WINGET_TOKEN" gh pr ready "$PR_NUM" --repo microsoft/winget-pkgs; then
-                  gh issue comment "$NUM" --repo "$REPO" --body "🚀 **Downstream PR checks passed:** Marking microsoft/winget-pkgs#${PR_NUM} as Ready for Review."
-                  EXISTING_COMMENTS="$EXISTING_COMMENTS
-🚀 **Downstream PR checks passed:** Marking microsoft/winget-pkgs#${PR_NUM} as Ready for Review."
+                  READY_COMMENT="🚀 **Downstream PR checks passed:** Marking microsoft/winget-pkgs#${PR_NUM} as Ready for Review."
+                  gh issue comment "$NUM" --repo "$REPO" --body "$READY_COMMENT"
+                  EXISTING_COMMENTS=$(printf '%s\n%s\n' "$EXISTING_COMMENTS" "$READY_COMMENT")
                 else
                   echo "Failed to mark PR #$PR_NUM as ready."
                 fi
