@@ -64,7 +64,11 @@ jobs:
 
   build:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # The guard is per-step, not on the job. A matrix job skipped by a
+    # job-level `if:` is never expanded, so it reports one check literally
+    # named "build (${{ matrix.rid }})" and the ruleset's eight required
+    # "build (<rid>)" contexts never report at all. Letting the matrix expand
+    # and skipping the work inside keeps every context reporting success.
     # Explicit name keeps the check context as "build (<rid>)" so it matches the
     # branch ruleset's required status checks even though the matrix now carries
     # extra dimensions (os, musl).
@@ -91,22 +95,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: ${{ needs.changes.outputs.code == 'true' }}
 
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
-        if: ${{ !matrix.musl }}
+        if: ${{ needs.changes.outputs.code == 'true' && !matrix.musl }}
         with:
           dotnet-version: '10.x'
 
       - name: Install AOT prerequisites (Linux)
-        if: ${{ startsWith(matrix.os, 'ubuntu') && !matrix.musl }}
+        if: ${{ needs.changes.outputs.code == 'true' && startsWith(matrix.os, 'ubuntu') && !matrix.musl }}
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Publish native AOT binary
-        if: ${{ !matrix.musl }}
+        if: ${{ needs.changes.outputs.code == 'true' && !matrix.musl }}
         run: dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish
 
       - name: Publish native AOT binary (musl, Alpine container)
-        if: ${{ matrix.musl }}
+        if: ${{ needs.changes.outputs.code == 'true' && matrix.musl }}
         run: |
           docker run --rm -v "$PWD":/src -w /src \
             mcr.microsoft.com/dotnet/sdk:10.0-alpine \
