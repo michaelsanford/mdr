@@ -2,13 +2,14 @@ using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Spectre.Console;
+using System.Collections.Frozen;
 using System.Text;
 using System.Text.RegularExpressions;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-var schemes = new ColorScheme[]
-{
+ColorScheme[] schemes =
+[
     new("Monokai",    "38;5;228;1", "38;5;81;1", "38;5;166;1", "38;5;141;1",
         "38;5;197", "38;5;186", "38;5;242", "38;5;81", "38;5;141;48;5;236", "38;5;242", "1"),
     new("Dracula",    "38;5;141;1", "38;5;117;1", "38;5;84;1", "38;5;215;1",
@@ -21,7 +22,8 @@ var schemes = new ColorScheme[]
         "38;5;37", "38;5;36", "38;5;246", "38;5;33", "38;5;136;48;5;236", "38;5;246", "1"),
     new("Catppuccin", "38;5;183;1", "38;5;116;1", "38;5;150;1", "38;5;217;1",
         "38;5;183", "38;5;150", "38;5;243", "38;5;116", "38;5;217;48;5;236", "38;5;243", "1"),
-};
+];
+
 
 // --- Parse input ---
 var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
@@ -234,8 +236,8 @@ static void DrawPage(List<string> lines, int offset, int pageHeight, string file
 
     // Keymap bar with theme button showing current scheme name
     var keySb = new StringBuilder(" ");
-    var keys = new[] { "↑↓", "PgUp", "PgDn", "Home", "End", "t", "q" };
-    var labels = new[] { "scroll", "page up", "page down", "top", "bottom", scheme.Name, "quit" };
+    ReadOnlySpan<string> keys = ["↑↓", "PgUp", "PgDn", "Home", "End", "t", "q"];
+    ReadOnlySpan<string> labels = ["scroll", "page up", "page down", "top", "bottom", scheme.Name, "quit"];
     for (int k = 0; k < keys.Length; k++)
         keySb.Append($"\x1b[97;48;5;238m {keys[k]} \x1b[0m\x1b[90m {labels[k]}  \x1b[0m");
     Console.Write(keySb.ToString());
@@ -351,27 +353,48 @@ static int GetConsoleWindowHeight(int fallback = 24)
 }
 
 // --- Renderer ---
-class TerminalRenderer(int width, ColorScheme cs)
+partial class TerminalRenderer(int width, ColorScheme cs)
 {
-    // Compiled once at class load — reused across all rendering calls
-    private static readonly Regex AnsiRegex    = new(@"\x1b\[[0-9;]*m", RegexOptions.Compiled);
-    private static readonly Regex StringRegex  = new(@"""[^""]*""",      RegexOptions.Compiled);
-    private static readonly Regex CommentRegex = new(@"(//.*|#\s.*)",    RegexOptions.Compiled);
-    // Fence labels are whatever a document author typed, so they are mapped onto a
-    // closed set of canonical ids before use. That keeps the regex cache bounded --
-    // an arbitrary label can no longer add an entry -- and keeps every keyword
-    // pattern provably derived from the constant table in GetKeywords.
-    private static readonly Dictionary<string, string> CanonicalLanguages = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["csharp"] = "csharp", ["cs"] = "csharp", ["c#"] = "csharp",
-        ["javascript"] = "javascript", ["js"] = "javascript",
-        ["typescript"] = "javascript", ["ts"] = "javascript",
-        ["python"] = "python", ["py"] = "python",
-        ["rust"] = "rust", ["rs"] = "rust",
-        ["go"] = "go",
-    };
+    [GeneratedRegex(@"\x1b\[[0-9;]*m")]
+    private static partial Regex AnsiRegex();
 
-    private static readonly Dictionary<string, Regex> KeywordRegexCache = new(StringComparer.Ordinal);
+    [GeneratedRegex(@"""[^""]*""")]
+    private static partial Regex StringRegex();
+
+    [GeneratedRegex(@"(//.*|#\s.*)")]
+    private static partial Regex CommentRegex();
+
+    [GeneratedRegex(@"\b(?:using|namespace|class|struct|interface|enum|public|private|protected|internal|static|void|int|string|bool|var|new|return|if|else|for|foreach|while|switch|case|break|async|await|null|true|false|readonly|override|virtual|abstract|sealed)\b")]
+    private static partial Regex CSharpKeywordsRegex();
+
+    [GeneratedRegex(@"\b(?:const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|null|undefined|true|false|this|typeof|interface|type)\b")]
+    private static partial Regex JavaScriptKeywordsRegex();
+
+    [GeneratedRegex(@"\b(?:def|class|import|from|return|if|elif|else|for|while|in|not|and|or|None|True|False|self|with|as|try|except|raise|yield|async|await|lambda)\b")]
+    private static partial Regex PythonKeywordsRegex();
+
+    [GeneratedRegex(@"\b(?:fn|let|mut|pub|struct|enum|impl|trait|use|mod|return|if|else|for|while|match|self|Self|true|false|async|await|where|type)\b")]
+    private static partial Regex RustKeywordsRegex();
+
+    [GeneratedRegex(@"\b(?:func|package|import|var|const|type|struct|interface|return|if|else|for|range|switch|case|defer|go|chan|map|nil|true|false)\b")]
+    private static partial Regex GoKeywordsRegex();
+
+    // Fence labels are mapped onto precompiled regexes via a frozen dictionary for O(1) allocation-free lookup
+    private static readonly FrozenDictionary<string, Regex> LanguageRegexes = new Dictionary<string, Regex>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["csharp"] = CSharpKeywordsRegex(),
+        ["cs"] = CSharpKeywordsRegex(),
+        ["c#"] = CSharpKeywordsRegex(),
+        ["javascript"] = JavaScriptKeywordsRegex(),
+        ["js"] = JavaScriptKeywordsRegex(),
+        ["typescript"] = JavaScriptKeywordsRegex(),
+        ["ts"] = JavaScriptKeywordsRegex(),
+        ["python"] = PythonKeywordsRegex(),
+        ["py"] = PythonKeywordsRegex(),
+        ["rust"] = RustKeywordsRegex(),
+        ["rs"] = RustKeywordsRegex(),
+        ["go"] = GoKeywordsRegex(),
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     public List<string> RenderToLines(MarkdownDocument doc)
     {
@@ -402,14 +425,14 @@ class TerminalRenderer(int width, ColorScheme cs)
 
             case FencedCodeBlock code:
                 var lang = code.Info ?? "";
-                var codeText = string.Join('\n', code.Lines.Lines.Take(code.Lines.Count).Select(l => l.ToString()));
-                RenderCodeBlock(codeText, lang, output);
+                var codeLines = code.Lines.Lines.Take(code.Lines.Count).Select(l => l.ToString());
+                RenderCodeBlock(codeLines, lang, output);
                 output.Add("");
                 break;
 
             case CodeBlock code2:
-                var plainCode = string.Join('\n', code2.Lines.Lines.Take(code2.Lines.Count).Select(l => l.ToString()));
-                RenderCodeBlock(plainCode, "", output);
+                var plainLines = code2.Lines.Lines.Take(code2.Lines.Count).Select(l => l.ToString());
+                RenderCodeBlock(plainLines, "", output);
                 output.Add("");
                 break;
 
@@ -536,10 +559,9 @@ class TerminalRenderer(int width, ColorScheme cs)
         output.Add($"\x1b[{b}m{botBorder}\x1b[0m");
     }
 
-    private void RenderCodeBlock(string code, string lang, List<string> output)
+    private void RenderCodeBlock(IEnumerable<string> codeLines, string lang, List<string> output)
     {
         var innerWidth = width - 4;
-        var codeLines = code.Split('\n');
         var b = cs.Border;
 
         var topLabel = string.IsNullOrEmpty(lang)
@@ -559,20 +581,7 @@ class TerminalRenderer(int width, ColorScheme cs)
     }
 
     /// <summary>Keyword pattern for a fence label, or null when the language is unknown.</summary>
-    private static Regex? KeywordRegexFor(string lang)
-    {
-        if (!CanonicalLanguages.TryGetValue(lang, out var canonical)) return null;
-
-        if (!KeywordRegexCache.TryGetValue(canonical, out var keywordRegex))
-        {
-            var keywords = GetKeywords(canonical);
-            var pattern = $@"\b(?:{string.Join("|", keywords.Select(Regex.Escape))})\b";
-            keywordRegex = new Regex(pattern, RegexOptions.Compiled);
-            KeywordRegexCache[canonical] = keywordRegex;
-        }
-
-        return keywordRegex;
-    }
+    private static Regex? KeywordRegexFor(string lang) => LanguageRegexes.GetValueOrDefault(lang);
 
     private string HighlightLine(string line, string lang)
     {
@@ -588,22 +597,12 @@ class TerminalRenderer(int width, ColorScheme cs)
 
         // String literals and comments are applied after and take visual priority —
         // their spans re-colour anything (including keyword highlights) they contain.
-        result = StringRegex.Replace(result,  m => $"\x1b[{cs.String}m{m.Value}\x1b[0m");
-        result = CommentRegex.Replace(result, m => $"\x1b[{cs.Comment}m{m.Value}\x1b[0m");
+        result = StringRegex().Replace(result,  m => $"\x1b[{cs.String}m{m.Value}\x1b[0m");
+        result = CommentRegex().Replace(result, m => $"\x1b[{cs.Comment}m{m.Value}\x1b[0m");
         return result;
     }
 
-    private static int VisibleLength(string s) => s.Contains('\x1b') ? AnsiRegex.Replace(s, "").Length : s.Length;
-
-    private static string[] GetKeywords(string lang) => lang.ToLowerInvariant() switch
-    {
-        "csharp" or "cs" or "c#" => ["using", "namespace", "class", "struct", "interface", "enum", "public", "private", "protected", "internal", "static", "void", "int", "string", "bool", "var", "new", "return", "if", "else", "for", "foreach", "while", "switch", "case", "break", "async", "await", "null", "true", "false", "readonly", "override", "virtual", "abstract", "sealed"],
-        "javascript" or "js" or "typescript" or "ts" => ["const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "import", "export", "from", "async", "await", "new", "null", "undefined", "true", "false", "this", "typeof", "interface", "type"],
-        "python" or "py" => ["def", "class", "import", "from", "return", "if", "elif", "else", "for", "while", "in", "not", "and", "or", "None", "True", "False", "self", "with", "as", "try", "except", "raise", "yield", "async", "await", "lambda"],
-        "rust" or "rs" => ["fn", "let", "mut", "pub", "struct", "enum", "impl", "trait", "use", "mod", "return", "if", "else", "for", "while", "match", "self", "Self", "true", "false", "async", "await", "where", "type"],
-        "go" => ["func", "package", "import", "var", "const", "type", "struct", "interface", "return", "if", "else", "for", "range", "switch", "case", "defer", "go", "chan", "map", "nil", "true", "false"],
-        _ => []
-    };
+    internal static int VisibleLength(string s) => s.Contains('\x1b') ? AnsiRegex().Replace(s, "").Length : s.Length;
 
     private string RenderInlines(ContainerInline? inlines)
     {
@@ -614,7 +613,7 @@ class TerminalRenderer(int width, ColorScheme cs)
             switch (inline)
             {
                 case LiteralInline lit:
-                    sb.Append(lit.Content.ToString());
+                    sb.Append(lit.Content.AsSpan());
                     break;
                 case EmphasisInline em:
                     var inner = RenderInlines(em);
@@ -646,7 +645,7 @@ class TerminalRenderer(int width, ColorScheme cs)
         var sb = new StringBuilder();
         foreach (var inline in inlines)
         {
-            if (inline is LiteralInline lit) sb.Append(lit.Content.ToString());
+            if (inline is LiteralInline lit) sb.Append(lit.Content.AsSpan());
             else if (inline is ContainerInline container) sb.Append(GetInlineText(container));
             else sb.Append(inline);
         }
