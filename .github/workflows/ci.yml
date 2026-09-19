@@ -106,6 +106,10 @@ jobs:
         if: ${{ needs.changes.outputs.code == 'true' && startsWith(matrix.os, 'ubuntu') && !matrix.musl }}
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
+      - name: Run unit tests
+        if: ${{ needs.changes.outputs.code == 'true' && matrix.rid == 'linux-x64' }}
+        run: dotnet test tests/mdr.Tests/mdr.Tests.csproj
+
       - name: Publish native AOT binary
         if: ${{ needs.changes.outputs.code == 'true' && !matrix.musl }}
         run: dotnet publish mdr.csproj -c Release -r ${{ matrix.rid }} -o publish
