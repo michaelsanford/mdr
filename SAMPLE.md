@@ -22,7 +22,7 @@ Here's another paragraph to show spacing. It contains a [hyperlink](https://gith
 
 ### Ordered
 
-1. Install the .NET 9 SDK
+1. Install the .NET 10 SDK
 2. Clone the repository
 3. Build the project
 4. Run `mdr SAMPLE.md`
@@ -244,7 +244,7 @@ Another section after a different rule syntax.
 - GitHub: [mdr repository](https://github.com/michaelsanford/mdr)
 - Docs: [Markdig](https://github.com/xoofx/markdig)
 - Docs: [Spectre.Console](https://spectreconsole.net/)
-- Download: [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- Download: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ## Nested Formatting
 
