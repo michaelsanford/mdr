@@ -37,8 +37,8 @@
       },
       "Markdig": {
         "type": "Transitive",
-        "resolved": "1.3.2",
-        "contentHash": "fZgOC/3CswUrndjDTac70aQpYdtxbW5+5bRumR7vzvI2HJbkmgKisB1c9oT+GA6v0jB/JDR9BLa9FiPzQmaK6A=="
+        "resolved": "1.5.0",
+        "contentHash": "oEm6N4PYFPUZiJ5e89993AE6hfC8EWRGD5M8nyoSJbwD4GgW818mjlQCk++SdTV4godaN50Ybcmm4j2Dp76oIQ=="
       },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
@@ -114,7 +114,7 @@
       "mdr": {
         "type": "Project",
         "dependencies": {
-          "Markdig": "[1.3.2, )",
+          "Markdig": "[1.5.0, )",
           "Spectre.Console": "[0.57.2, )"
         }
       }
