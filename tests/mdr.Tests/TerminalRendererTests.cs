@@ -192,4 +192,134 @@ public class TerminalRendererTests
         Assert.Contains(lines, l => l.Contains("Bob") && l.Contains("Designer"));
         Assert.Contains(lines, l => l.Contains('╰') && l.Contains('┴') && l.Contains('╯'));
     }
+
+    [Fact]
+    public void Table_WrapsContent_WhenTableIsTooWide()
+    {
+        var markdown = """
+            | Job | Where | Role (= CLI profile) | What it can do |
+            | --- | --- | --- | --- |
+            | **Investigate** | production `655014936372`, `ap-southeast-2` (Sydney) | `ReadOnlyDataSafe` | See every configuration, metric, alarm and audit event. No customer data, no secret values, no changes. |
+            | **Build** | Training Sandbox `713881802651`, `ca-central-1` (Montreal) | `CloudTrainee` | Create, break, fix and tear down your own `trainee-<name>-*` resources. |
+            """;
+        var lines = Render(markdown, width: 80);
+
+        // Does not truncate with ellipsis
+        Assert.DoesNotContain(lines, l => l.Contains('…'));
+        // Does not dump Markdig AST type names
+        Assert.DoesNotContain(lines, l => l.Contains("Markdig.Syntax"));
+        Assert.DoesNotContain(lines, l => l.Contains("CodeInline"));
+
+        // Wraps into multiple lines for the data row
+        Assert.True(lines.Count > 10);
+
+        // Every line within the table boundaries has visible length equal to table width
+        var borderLines = lines.Where(l => l.Contains('│') || l.Contains('╭') || l.Contains('├') || l.Contains('╰')).ToList();
+        Assert.NotEmpty(borderLines);
+        var expectedWidth = TerminalRenderer.VisibleLength(borderLines[0]);
+        foreach (var bl in borderLines)
+        {
+            Assert.Equal(expectedWidth, TerminalRenderer.VisibleLength(bl));
+        }
+    }
+
+    [Fact]
+    public void Table_RendersFormattedInlines_InsideCells()
+    {
+        var markdown = """
+            | Feature | Example |
+            |---|---|
+            | Bold and Code | **Investigate** `ReadOnlyDataSafe` |
+            """;
+        var lines = Render(markdown, width: 60);
+
+        Assert.Contains(lines, l => l.Contains($"\x1b[{DefaultScheme.Bold}mInvestigate\x1b[22m")
+                                 && l.Contains($"\x1b[{DefaultScheme.InlineCode}mReadOnlyDataSafe\x1b[0m"));
+    }
+
+    [Fact]
+    public void Table_RespectsColumnAlignment()
+    {
+        var markdown = """
+            | Left | Center | Right |
+            | :--- | :---: | ---: |
+            | 1 | 2 | 3 |
+            | Long text | Middle | Far right |
+            """;
+        var lines = Render(markdown, width: 50);
+
+        // Right-aligned column should have padding spaces before the content
+        var rightCellLine = lines.FirstOrDefault(l => l.Contains("Far right"));
+        Assert.NotNull(rightCellLine);
+        // "Far right │" has no trailing extra spaces after the text before the border
+        Assert.Contains("Far right \x1b[38;5;242m│\x1b[0m", rightCellLine);
+    }
+
+    [Fact]
+    public void Table_HandlesBrInCells()
+    {
+        var markdown = """
+            | Col 1 | Col 2 |
+            | --- | --- |
+            | Line 1<br>Line 2 | Other |
+            """;
+        var lines = Render(markdown, width: 40);
+
+        Assert.Contains(lines, l => l.Contains("Line 1") && l.Contains("Other"));
+        Assert.Contains(lines, l => l.Contains("Line 2"));
+    }
+
+    [Fact]
+    public void Headings_WithInlineCode_RendersCleanTextWithoutTypeName()
+    {
+        var markdown = "### The `aws sts` command";
+        var lines = Render(markdown);
+
+        Assert.NotEmpty(lines);
+        Assert.Contains("### The aws sts command", lines[0]);
+        Assert.DoesNotContain("CodeInline", lines[0]);
+    }
+
+    [Fact]
+    public void Inlines_AutolinksAndHtmlEntitiesAndTaskLists_RenderCorrectly()
+    {
+        var markdown = """
+            Autolink: <https://github.com>
+            Entity: &copy; 2026 &mdash; Stelvio
+            - [ ] Unchecked
+            - [x] Checked
+            """;
+        var lines = Render(markdown);
+
+        Assert.Contains(lines, l => l.Contains("https://github.com"));
+        Assert.Contains(lines, l => l.Contains("© 2026 — Stelvio"));
+        Assert.Contains(lines, l => l.Contains("• [ ] Unchecked"));
+        Assert.Contains(lines, l => l.Contains("• [x] Checked"));
+        Assert.DoesNotContain(lines, l => l.Contains("Markdig"));
+    }
+
+    [Fact]
+    public void Inlines_Strikethrough_RendersWithAnsiStrikethrough()
+    {
+        var markdown = "~~deleted text~~";
+        var lines = Render(markdown);
+
+        Assert.NotEmpty(lines);
+        Assert.Contains("\x1b[9mdeleted text\x1b[29m", lines[0]);
+    }
+
+    [Fact]
+    public void Blockquote_WrapsLongTextAtSpecifiedWidth()
+    {
+        var markdown = "> This is a very long blockquote line that definitely exceeds thirty characters in length and must wrap cleanly across multiple lines.";
+        var lines = Render(markdown, width: 35);
+
+        Assert.True(lines.Count > 2);
+        foreach (var line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            Assert.StartsWith("\x1b[38;5;242m│\x1b[0m \x1b[3m", line);
+            Assert.True(TerminalRenderer.VisibleLength(line) <= 35);
+        }
+    }
 }

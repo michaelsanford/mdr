@@ -1,10 +1,15 @@
 using Markdig;
+using Markdig.Extensions.Tables;
+using Markdig.Extensions.TaskLists;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Spectre.Console;
 using System.Collections.Frozen;
 using System.Text;
 using System.Text.RegularExpressions;
+using Table = Markdig.Extensions.Tables.Table;
+using TableCell = Markdig.Extensions.Tables.TableCell;
+using TableRow = Markdig.Extensions.Tables.TableRow;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -457,7 +462,12 @@ partial class TerminalRenderer(int width, ColorScheme cs)
                     if (child is ParagraphBlock qp)
                     {
                         var qText = RenderInlines(qp.Inline);
-                        output.Add($"\x1b[{cs.Border}m│\x1b[0m \x1b[3m{qText}\x1b[0m");
+                        var availWidth = Math.Max(1, width - 2);
+                        foreach (var line in WrapText(qText, availWidth))
+                        {
+                            var styledLine = line.Replace("\x1b[0m", "\x1b[0m\x1b[3m");
+                            output.Add($"\x1b[{cs.Border}m│\x1b[0m \x1b[3m{styledLine}\x1b[0m");
+                        }
                     }
                     else RenderBlock(child, output);
                 }
@@ -501,36 +511,127 @@ partial class TerminalRenderer(int width, ColorScheme cs)
         }
     }
 
-    private void RenderTable(Markdig.Extensions.Tables.Table table, List<string> output)
+    private void RenderTable(Table table, List<string> output)
     {
-        var rows = new List<List<string>>();
+        var rows = new List<(List<string> Cells, bool IsHeader)>();
         foreach (var rowObj in table)
-            if (rowObj is Markdig.Extensions.Tables.TableRow row)
+        {
+            if (rowObj is TableRow row)
             {
                 var cells = new List<string>();
                 foreach (var cell in row)
-                    if (cell is Markdig.Extensions.Tables.TableCell tc)
-                        cells.Add(GetBlockText(tc));
-                rows.Add(cells);
+                {
+                    if (cell is TableCell tc)
+                        cells.Add(RenderTableCell(tc));
+                }
+                rows.Add((cells, row.IsHeader));
             }
+        }
 
         if (rows.Count == 0) return;
-        var colCount = rows.Max(r => r.Count);
-        foreach (var row in rows) while (row.Count < colCount) row.Add("");
+        var colCount = rows.Max(r => r.Cells.Count);
+        if (colCount == 0) return;
+
+        foreach (var row in rows)
+        {
+            while (row.Cells.Count < colCount)
+                row.Cells.Add("");
+        }
+
+        var alignments = new TableColumnAlign?[colCount];
+        if (table.ColumnDefinitions != null)
+        {
+            for (int i = 0; i < Math.Min(colCount, table.ColumnDefinitions.Count); i++)
+                alignments[i] = table.ColumnDefinitions[i]?.Alignment;
+        }
+
+        var naturalWidths = new int[colCount];
+        var minWidths = new int[colCount];
+
+        for (int c = 0; c < colCount; c++)
+        {
+            int maxCellNatural = 3;
+            int maxWordLen = 3;
+            for (int r = 0; r < rows.Count; r++)
+            {
+                var cell = rows[r].Cells[c];
+                var lines = cell.Split('\n');
+                foreach (var line in lines)
+                {
+                    maxCellNatural = Math.Max(maxCellNatural, VisibleLength(line));
+                    foreach (var w in line.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                        maxWordLen = Math.Max(maxWordLen, VisibleLength(w));
+                }
+            }
+            naturalWidths[c] = maxCellNatural;
+            minWidths[c] = Math.Min(maxCellNatural, maxWordLen);
+        }
+
+        var borderChars = 1 + colCount * 3;
+        var available = Math.Max(colCount * 3, width - borderChars);
 
         var colWidths = new int[colCount];
-        foreach (var row in rows)
-            for (int i = 0; i < colCount; i++)
-                colWidths[i] = Math.Max(colWidths[i], row[i].Length);
+        var totalNatural = naturalWidths.Sum();
 
-        var totalContent = colWidths.Sum();
-        var borderChars = 1 + colCount * 3;
-        var available = width - borderChars;
-        if (totalContent > available && available > 0)
+        if (totalNatural <= available)
         {
-            var scale = (double)available / totalContent;
             for (int i = 0; i < colCount; i++)
-                colWidths[i] = Math.Max(3, (int)(colWidths[i] * scale));
+                colWidths[i] = naturalWidths[i];
+        }
+        else
+        {
+            var totalMin = minWidths.Sum();
+            if (totalMin <= available)
+            {
+                var excess = available - totalMin;
+                var demands = new int[colCount];
+                for (int i = 0; i < colCount; i++)
+                    demands[i] = naturalWidths[i] - minWidths[i];
+                var totalDemand = demands.Sum();
+
+                int allocated = 0;
+                for (int i = 0; i < colCount; i++)
+                {
+                    int extra = totalDemand > 0 ? (int)((long)demands[i] * excess / totalDemand) : 0;
+                    colWidths[i] = minWidths[i] + extra;
+                    allocated += colWidths[i];
+                }
+
+                int remaining = available - allocated;
+                while (remaining > 0)
+                {
+                    int bestCol = -1;
+                    int maxShortfall = -1;
+                    for (int i = 0; i < colCount; i++)
+                    {
+                        int shortfall = naturalWidths[i] - colWidths[i];
+                        if (shortfall > maxShortfall)
+                        {
+                            maxShortfall = shortfall;
+                            bestCol = i;
+                        }
+                    }
+                    if (bestCol == -1 || maxShortfall <= 0)
+                    {
+                        colWidths[0] += remaining;
+                        break;
+                    }
+                    colWidths[bestCol]++;
+                    remaining--;
+                }
+            }
+            else
+            {
+                int allocated = 0;
+                for (int i = 0; i < colCount; i++)
+                {
+                    colWidths[i] = Math.Max(3, (int)((long)available * naturalWidths[i] / totalNatural));
+                    allocated += colWidths[i];
+                }
+                int diff = available - allocated;
+                if (diff != 0 && colWidths.Length > 0)
+                    colWidths[^1] = Math.Max(3, colWidths[^1] + diff);
+            }
         }
 
         var b = cs.Border;
@@ -539,24 +640,79 @@ partial class TerminalRenderer(int width, ColorScheme cs)
         var botBorder = "╰" + string.Join("┴", colWidths.Select(w => new string('─', w + 2))) + "╯";
 
         output.Add($"\x1b[{b}m{topBorder}\x1b[0m");
+
         for (int r = 0; r < rows.Count; r++)
         {
-            var sb = new StringBuilder();
-            sb.Append($"\x1b[{b}m│\x1b[0m");
+            var isHeader = rows[r].IsHeader || (r == 0 && rows.Count > 1 && !rows.Any(x => x.IsHeader));
+            var cellLinesByCol = new List<string>[colCount];
+            int rowHeight = 1;
+
             for (int c = 0; c < colCount; c++)
             {
-                var cell = rows[r][c];
-                if (cell.Length > colWidths[c]) cell = cell[..(colWidths[c] - 1)] + "…";
-                var padded = cell.PadRight(colWidths[c]);
-                if (r == 0)
-                    sb.Append($" \x1b[{cs.Bold}m{padded}\x1b[0m \x1b[{b}m│\x1b[0m");
-                else
-                    sb.Append($" {padded} \x1b[{b}m│\x1b[0m");
+                var wrapped = WrapText(rows[r].Cells[c], colWidths[c]);
+                if (wrapped.Count == 0) wrapped = [""];
+                cellLinesByCol[c] = wrapped;
+                rowHeight = Math.Max(rowHeight, wrapped.Count);
             }
-            output.Add(sb.ToString());
-            if (r == 0) output.Add($"\x1b[{b}m{midBorder}\x1b[0m");
+
+            for (int lineIdx = 0; lineIdx < rowHeight; lineIdx++)
+            {
+                var sb = new StringBuilder();
+                sb.Append($"\x1b[{b}m│\x1b[0m");
+                for (int c = 0; c < colCount; c++)
+                {
+                    var lineText = lineIdx < cellLinesByCol[c].Count ? cellLinesByCol[c][lineIdx] : "";
+                    var padded = PadCell(lineText, colWidths[c], alignments[c]);
+                    if (isHeader)
+                    {
+                        var boldPadded = padded.Replace("\x1b[0m", $"\x1b[0m\x1b[{cs.Bold}m");
+                        sb.Append($" \x1b[{cs.Bold}m{boldPadded}\x1b[0m \x1b[{b}m│\x1b[0m");
+                    }
+                    else
+                    {
+                        sb.Append($" {padded} \x1b[{b}m│\x1b[0m");
+                    }
+                }
+                output.Add(sb.ToString());
+            }
+
+            if (isHeader && r == 0)
+            {
+                output.Add($"\x1b[{b}m{midBorder}\x1b[0m");
+            }
         }
+
         output.Add($"\x1b[{b}m{botBorder}\x1b[0m");
+    }
+
+    private static string PadCell(string text, int width, TableColumnAlign? alignment)
+    {
+        var vLen = VisibleLength(text);
+        var pad = Math.Max(0, width - vLen);
+        if (pad == 0) return text;
+
+        return alignment switch
+        {
+            TableColumnAlign.Right => new string(' ', pad) + text,
+            TableColumnAlign.Center => new string(' ', pad / 2) + text + new string(' ', pad - pad / 2),
+            _ => text + new string(' ', pad),
+        };
+    }
+
+    private string RenderTableCell(TableCell cell)
+    {
+        var sb = new StringBuilder();
+        bool first = true;
+        foreach (var block in cell)
+        {
+            if (block is ParagraphBlock { Inline: not null } p)
+            {
+                if (!first) sb.Append('\n');
+                sb.Append(RenderInlines(p.Inline));
+                first = false;
+            }
+        }
+        return sb.ToString();
     }
 
     private void RenderCodeBlock(IEnumerable<string> codeLines, string lang, List<string> output)
@@ -617,22 +773,65 @@ partial class TerminalRenderer(int width, ColorScheme cs)
                     break;
                 case EmphasisInline em:
                     var inner = RenderInlines(em);
-                    sb.Append(em.DelimiterCount == 2
-                        ? $"\x1b[{cs.Bold}m{inner}\x1b[22m"
-                        : $"\x1b[3m{inner}\x1b[23m");
+                    if (em.DelimiterChar == '~')
+                    {
+                        sb.Append($"\x1b[9m{inner}\x1b[29m");
+                    }
+                    else if (em.DelimiterCount >= 3)
+                    {
+                        sb.Append($"\x1b[{cs.Bold};3m{inner}\x1b[22;23m");
+                    }
+                    else if (em.DelimiterCount == 2)
+                    {
+                        sb.Append($"\x1b[{cs.Bold}m{inner}\x1b[22m");
+                    }
+                    else
+                    {
+                        sb.Append($"\x1b[3m{inner}\x1b[23m");
+                    }
                     break;
                 case CodeInline code:
                     sb.Append($"\x1b[{cs.InlineCode}m{code.Content}\x1b[0m");
                     break;
                 case LinkInline link:
                     var linkText = RenderInlines(link);
-                    sb.Append($"\x1b[{cs.Link};4m{linkText}\x1b[0m \x1b[{cs.Comment}m({link.Url})\x1b[0m");
+                    if (link.IsImage)
+                    {
+                        sb.Append($"\x1b[{cs.Link}m🖼 {linkText}\x1b[0m");
+                        if (!string.IsNullOrEmpty(link.Url))
+                            sb.Append($" \x1b[{cs.Comment}m({link.Url})\x1b[0m");
+                    }
+                    else
+                    {
+                        sb.Append($"\x1b[{cs.Link};4m{linkText}\x1b[0m");
+                        if (!string.IsNullOrEmpty(link.Url))
+                            sb.Append($" \x1b[{cs.Comment}m({link.Url})\x1b[0m");
+                    }
                     break;
-                case LineBreakInline:
-                    sb.Append('\n');
+                case AutolinkInline auto:
+                    sb.Append($"\x1b[{cs.Link};4m{auto.Url}\x1b[0m");
+                    break;
+                case LineBreakInline lb:
+                    sb.Append(lb.IsHard ? '\n' : ' ');
+                    break;
+                case HtmlEntityInline entity:
+                    sb.Append(entity.Transcoded.AsSpan());
+                    break;
+                case HtmlInline html:
+                    if (html.Tag.Equals("<br>", StringComparison.OrdinalIgnoreCase) ||
+                        html.Tag.Equals("<br/>", StringComparison.OrdinalIgnoreCase) ||
+                        html.Tag.Equals("<br />", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sb.Append('\n');
+                    }
+                    break;
+                case TaskList task:
+                    sb.Append(task.Checked ? "[x]" : "[ ]");
+                    break;
+                case ContainerInline container:
+                    sb.Append(RenderInlines(container));
                     break;
                 default:
-                    sb.Append(inline);
                     break;
             }
         }
@@ -645,19 +844,47 @@ partial class TerminalRenderer(int width, ColorScheme cs)
         var sb = new StringBuilder();
         foreach (var inline in inlines)
         {
-            if (inline is LiteralInline lit) sb.Append(lit.Content.AsSpan());
-            else if (inline is ContainerInline container) sb.Append(GetInlineText(container));
-            else sb.Append(inline);
+            switch (inline)
+            {
+                case LiteralInline lit:
+                    sb.Append(lit.Content.AsSpan());
+                    break;
+                case CodeInline code:
+                    sb.Append(code.Content);
+                    break;
+                case EmphasisInline em:
+                    sb.Append(GetInlineText(em));
+                    break;
+                case LinkInline link:
+                    sb.Append(GetInlineText(link));
+                    break;
+                case AutolinkInline auto:
+                    sb.Append(auto.Url);
+                    break;
+                case HtmlEntityInline entity:
+                    sb.Append(entity.Transcoded.AsSpan());
+                    break;
+                case HtmlInline html:
+                    if (html.Tag.Equals("<br>", StringComparison.OrdinalIgnoreCase) ||
+                        html.Tag.Equals("<br/>", StringComparison.OrdinalIgnoreCase) ||
+                        html.Tag.Equals("<br />", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sb.Append('\n');
+                    }
+                    break;
+                case LineBreakInline lb:
+                    sb.Append(lb.IsHard ? '\n' : ' ');
+                    break;
+                case TaskList task:
+                    sb.Append(task.Checked ? "[x]" : "[ ]");
+                    break;
+                case ContainerInline container:
+                    sb.Append(GetInlineText(container));
+                    break;
+                default:
+                    break;
+            }
         }
-        return sb.ToString();
-    }
-
-    private static string GetBlockText(Markdig.Extensions.Tables.TableCell cell)
-    {
-        var sb = new StringBuilder();
-        foreach (var block in cell)
-            if (block is ParagraphBlock { Inline: not null } p)
-                sb.Append(GetInlineText(p.Inline));
         return sb.ToString();
     }
 
@@ -667,21 +894,153 @@ partial class TerminalRenderer(int width, ColorScheme cs)
         var result = new List<string>();
         foreach (var segment in text.Split('\n'))
         {
-            if (VisibleLength(segment) <= width) { result.Add(segment); continue; }
-            var words = segment.Split(' ');
+            if (VisibleLength(segment) <= width)
+            {
+                result.Add(segment);
+                continue;
+            }
+
+            var words = segment.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var current = new StringBuilder();
             int currentLen = 0;
+            var activeAnsi = new List<string>();
+
             foreach (var word in words)
             {
                 var wLen = VisibleLength(word);
+                if (wLen > width)
+                {
+                    if (currentLen > 0)
+                    {
+                        if (activeAnsi.Count > 0) current.Append("\x1b[0m");
+                        result.Add(current.ToString());
+                        current.Clear();
+                        currentLen = 0;
+                    }
+
+                    var chunks = SplitWordToWidth(word, width, activeAnsi);
+                    for (int i = 0; i < chunks.Count; i++)
+                    {
+                        if (i < chunks.Count - 1)
+                        {
+                            result.Add(chunks[i]);
+                        }
+                        else
+                        {
+                            current.Append(chunks[i]);
+                            currentLen = VisibleLength(chunks[i]);
+                        }
+                    }
+                    continue;
+                }
+
                 if (currentLen + wLen + (currentLen > 0 ? 1 : 0) > width && currentLen > 0)
-                { result.Add(current.ToString()); current.Clear(); currentLen = 0; }
-                if (currentLen > 0) { current.Append(' '); currentLen++; }
-                current.Append(word); currentLen += wLen;
+                {
+                    if (activeAnsi.Count > 0) current.Append("\x1b[0m");
+                    result.Add(current.ToString());
+                    current.Clear();
+                    currentLen = 0;
+                    if (activeAnsi.Count > 0)
+                    {
+                        foreach (var ansi in activeAnsi) current.Append(ansi);
+                    }
+                }
+
+                if (currentLen > 0)
+                {
+                    current.Append(' ');
+                    currentLen++;
+                }
+
+                current.Append(word);
+                currentLen += wLen;
+                UpdateActiveAnsi(word, activeAnsi);
             }
-            if (current.Length > 0) result.Add(current.ToString());
+
+            if (current.Length > 0)
+            {
+                result.Add(current.ToString());
+            }
         }
         return result;
+    }
+
+    private static List<string> SplitWordToWidth(string word, int width, List<string> activeAnsi)
+    {
+        var chunks = new List<string>();
+        var currentChunk = new StringBuilder();
+        int currentVisible = 0;
+
+        int i = 0;
+        while (i < word.Length)
+        {
+            if (word[i] == '\x1b' && i + 1 < word.Length && word[i + 1] == '[')
+            {
+                int end = i + 2;
+                while (end < word.Length && word[end] != 'm')
+                    end++;
+                if (end < word.Length && word[end] == 'm')
+                {
+                    var ansiSeq = word.Substring(i, end - i + 1);
+                    currentChunk.Append(ansiSeq);
+                    UpdateActiveAnsi(ansiSeq, activeAnsi);
+                    i = end + 1;
+                    continue;
+                }
+            }
+
+            currentChunk.Append(word[i]);
+            currentVisible++;
+            i++;
+
+            if (currentVisible >= width && i < word.Length)
+            {
+                if (activeAnsi.Count > 0)
+                    currentChunk.Append("\x1b[0m");
+                chunks.Add(currentChunk.ToString());
+                currentChunk.Clear();
+                currentVisible = 0;
+                if (activeAnsi.Count > 0)
+                {
+                    foreach (var ansi in activeAnsi)
+                        currentChunk.Append(ansi);
+                }
+            }
+        }
+
+        if (currentChunk.Length > 0)
+            chunks.Add(currentChunk.ToString());
+
+        return chunks;
+    }
+
+    private static void UpdateActiveAnsi(string s, List<string> activeAnsi)
+    {
+        var matches = AnsiRegex().Matches(s);
+        foreach (Match match in matches)
+        {
+            var code = match.Value;
+            if (code == "\x1b[0m" || code == "\x1b[m")
+            {
+                activeAnsi.Clear();
+            }
+            else if (code == "\x1b[22m")
+            {
+                activeAnsi.RemoveAll(a => a.Contains(";1m") || a == "\x1b[1m");
+            }
+            else if (code == "\x1b[23m")
+            {
+                activeAnsi.RemoveAll(a => a == "\x1b[3m");
+            }
+            else if (code == "\x1b[29m")
+            {
+                activeAnsi.RemoveAll(a => a == "\x1b[9m");
+            }
+            else
+            {
+                activeAnsi.Add(code);
+            }
+        }
     }
 }
 
